@@ -97,19 +97,6 @@ export default function VentasPage() {
     }
   };
 
-  const getAbonoInfo = (order: Order) => {
-    if (order.estado === 'pendiente') {
-      return { tipo: 'Reserva', info: 'Sin abono' };
-    }
-    if (order.estado === 'abonado') {
-      return { tipo: 'Abonado', info: `$${Number(order.monto_pagado || 0).toFixed(2)} / $${Number(order.monto || 0).toFixed(2)}` };
-    }
-    if (order.estado === 'completado' && order.monto_pagado && order.monto_pagado < order.monto) {
-      return { tipo: 'Abono parcial', info: `$${Number(order.monto_pagado || 0).toFixed(2)} / $${Number(order.monto || 0).toFixed(2)}` };
-    }
-    return null;
-  };
-
   const getMetodoIcon = (metodo?: MetodoPago) => {
     switch (metodo) {
       case 'efectivo': return '💵';
@@ -268,7 +255,6 @@ export default function VentasPage() {
                 <th>Productos</th>
                 <th>Total</th>
                 <th>Método</th>
-                <th>Abono/Reserva</th>
                 <th>Envío</th>
                 <th>Estado</th>
                 <th>Fecha</th>
@@ -278,12 +264,11 @@ export default function VentasPage() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                     No se encontraron ventas
                   </td>
                 </tr>
               ) : filteredOrders.map(order => {
-                const abonoInfo = getAbonoInfo(order);
                 return (
                   <tr key={order.id}>
                     <td data-label="ID" className="font-mono text-sm" style={{ color: 'var(--text)' }}>{order.id}</td>
@@ -297,18 +282,6 @@ export default function VentasPage() {
                     <td data-label="Total" className="font-semibold" style={{ color: 'var(--text)' }}>${Number(order.monto || 0).toFixed(2)}</td>
                     <td data-label="Método" style={{ fontSize: 18 }}>
                       {getMetodoIcon(order.metodo_pago)}
-                    </td>
-                    <td data-label="Abono">
-                      {abonoInfo ? (
-                        <span className="badge" style={{ 
-                          backgroundColor: order.estado === 'pendiente' ? 'rgba(245,158,11,0.15)' : 'rgba(6,182,212,0.15)',
-                          color: order.estado === 'pendiente' ? '#fbbf24' : '#06b6d4'
-                        }}>
-                          {abonoInfo.tipo}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                      )}
                     </td>
                     <td data-label="Envío" style={{ textAlign: 'center', fontSize: 16 }}>
                       {order.notas && order.notas.trim() ? (

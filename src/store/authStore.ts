@@ -69,6 +69,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const { getSupabase } = await import('../services/supabaseClient')
       const supabase = getSupabase()
+
+      if (!supabase) {
+        console.warn('Supabase no configurado — omitiendo checkAuth')
+        set({ user: null, permissions: [], initialized: true, loading: false })
+        return
+      }
       
       const { data, error } = await supabase.auth.getSession()
       
@@ -163,6 +169,10 @@ export const loginAdmin = async (email: string, password: string): Promise<{ use
   try {
     const { getSupabase } = await import('../services/supabaseClient')
     const supabase = getSupabase()
+
+    if (!supabase) {
+      return { error: 'Supabase no configurado. Revisa las variables de entorno.' }
+    }
     
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -216,7 +226,9 @@ export const logout = async (): Promise<void> => {
   try {
     const { getSupabase } = await import('../services/supabaseClient')
     const supabase = getSupabase()
-    await supabase.auth.signOut()
+    if (supabase) {
+      await supabase.auth.signOut()
+    }
     useAuthStore.getState().clearAuth()
   } catch (err) {
     console.error('Error en logout:', err)

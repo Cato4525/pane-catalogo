@@ -966,33 +966,50 @@ export const useStore = create<AppState>()(
       tarjeta_autori: order.tarjeta_autori || null,
       factura_generada: order.factura_generada || false,
       notas: order.notas || '',
-      fecha: order.fecha
+      fecha: order.fecha,
+      user_id: null,
+      usuario_nombre: ''
     };
     
-    if (supabase) {
-      try {
-        const intentarGuardar = async (tabla: string): Promise<boolean> => {
-          const { data, error } = await supabase.from(tabla).insert(orderData).select().single();
-          if (error) {
-            console.error(`Error guardando en ${tabla}:`, error);
-            return false;
-          }
-          if (data) console.log(`Guardado en ${tabla}:`, data);
-          return true;
-        };
+    const { getSupabase } = await import('../services/supabaseClient')
+    const sb = getSupabase()
+    if (!sb) {
+      console.warn('Supabase no disponible — venta guardada solo localmente')
+      return
+    }
 
-        if (esDirecta) {
-          const ok = await intentarGuardar('ventas_directas');
-          if (!ok) {
-            console.warn('Fallback: guardando venta directa en pedidos');
-            await intentarGuardar('pedidos');
-          }
-        } else {
+    try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (user) {
+        orderData.user_id = user.id
+        orderData.usuario_nombre = user.user_metadata?.nombre || user.email || ''
+      }
+    } catch {
+      // Usuario no autenticado—se guarda sin user_id
+    }
+
+    try {
+      const intentarGuardar = async (tabla: string): Promise<boolean> => {
+        const { data, error } = await sb.from(tabla).insert(orderData).select().single();
+        if (error) {
+          console.error(`Error guardando en ${tabla}:`, error);
+          return false;
+        }
+        if (data) console.log(`Guardado en ${tabla}:`, data);
+        return true;
+      };
+
+      if (esDirecta) {
+        const ok = await intentarGuardar('ventas_directas');
+        if (!ok) {
+          console.warn('Fallback: guardando venta directa en pedidos');
           await intentarGuardar('pedidos');
         }
-      } catch (err) {
-        console.error('Exception guardando pedido:', err);
+      } else {
+        await intentarGuardar('pedidos');
       }
+    } catch (err) {
+      console.error('Exception guardando pedido:', err);
     }
   },
   
@@ -1006,23 +1023,25 @@ export const useStore = create<AppState>()(
       )
     }));
     
-    if (supabase) {
-      try {
-        const updateData: any = {};
-        if (orderUpdate.estado !== undefined) updateData.estado = orderUpdate.estado;
-        if (orderUpdate.monto_pagado !== undefined) updateData.monto_pagado = orderUpdate.monto_pagado;
-        if (orderUpdate.notas !== undefined) updateData.notas = orderUpdate.notas;
-        if (orderUpdate.items !== undefined) updateData.items = orderUpdate.items;
-        if (orderUpdate.monto !== undefined) updateData.monto = orderUpdate.monto;
-        
-        const { error } = await supabase.from('ventas_directas').update(updateData).eq('codigo', id);
-        if (error) {
-          const { error: err2 } = await supabase.from('pedidos').update(updateData).eq('codigo', id);
-          if (err2) console.error('Error actualizando pedido:', err2);
-        }
-      } catch (err) {
-        console.error('Exception actualizando pedido:', err);
+    const { getSupabase } = await import('../services/supabaseClient')
+    const sb = getSupabase()
+    if (!sb) return
+
+    try {
+      const updateData: any = {};
+      if (orderUpdate.estado !== undefined) updateData.estado = orderUpdate.estado;
+      if (orderUpdate.monto_pagado !== undefined) updateData.monto_pagado = orderUpdate.monto_pagado;
+      if (orderUpdate.notas !== undefined) updateData.notas = orderUpdate.notas;
+      if (orderUpdate.items !== undefined) updateData.items = orderUpdate.items;
+      if (orderUpdate.monto !== undefined) updateData.monto = orderUpdate.monto;
+      
+      const { error } = await sb.from('ventas_directas').update(updateData).eq('codigo', id);
+      if (error) {
+        const { error: err2 } = await sb.from('pedidos').update(updateData).eq('codigo', id);
+        if (err2) console.error('Error actualizando pedido:', err2);
       }
+    } catch (err) {
+      console.error('Exception actualizando pedido:', err);
     }
   },
   
@@ -1033,16 +1052,18 @@ export const useStore = create<AppState>()(
       reservasPos: state.reservasPos.filter((o) => o.id !== id),
     }));
     
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('ventas_directas').delete().eq('codigo', id);
-        if (error) {
-          const { error: err2 } = await supabase.from('pedidos').delete().eq('codigo', id);
-          if (err2) console.error('Error eliminando:', err2);
-        }
-      } catch (err) {
-        console.error('Exception eliminando pedido:', err);
+    const { getSupabase } = await import('../services/supabaseClient')
+    const sb = getSupabase()
+    if (!sb) return
+
+    try {
+      const { error } = await sb.from('ventas_directas').delete().eq('codigo', id);
+      if (error) {
+        const { error: err2 } = await sb.from('pedidos').delete().eq('codigo', id);
+        if (err2) console.error('Error eliminando:', err2);
       }
+    } catch (err) {
+      console.error('Exception eliminando pedido:', err);
     }
   },
   
@@ -1050,9 +1071,11 @@ export const useStore = create<AppState>()(
   
   // Cargar ventas directas desde Supabase
   fetchOrdersFromSupabase: async () => {
-    if (!supabase) return
+    const { getSupabase } = await import('../services/supabaseClient')
+    const sb = getSupabase()
+    if (!sb) return
     
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('ventas_directas')
       .select('*')
       .order('created_at', { ascending: false })
@@ -1061,7 +1084,7 @@ export const useStore = create<AppState>()(
       // Si la tabla no existe, fallback a pedidos filtrando directas
       if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
         console.warn('Tabla ventas_directas no existe, usando pedidos como fallback')
-        const { data: fallbackData, error: fbError } = await supabase
+        const { data: fallbackData, error: fbError } = await sb
           .from('pedidos')
           .select('*')
           .eq('tipo_venta', 'directo')
