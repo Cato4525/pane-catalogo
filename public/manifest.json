@@ -1,0 +1,16 @@
+{
+  "name": "Pane Catalogo",
+  "short_name": "PaneCatalogo",
+  "description": "Ecommerce Catalog System with Admin Panel and Public Store",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#22c55e",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
