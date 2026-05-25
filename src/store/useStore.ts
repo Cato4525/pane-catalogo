@@ -1016,13 +1016,13 @@ export const useStore = create<AppState>()(
       };
 
       if (esDirecta) {
-        const ok = await intentarGuardar('direct_sales');
+        const ok = await intentarGuardar('ventas_directas');
         if (!ok) {
           console.warn('Fallback: guardando venta directa en pedidos');
-          await intentarGuardar('pos_orders');
+          await intentarGuardar('pedidos');
         }
       } else {
-        await intentarGuardar('pos_orders');
+        await intentarGuardar('pedidos');
       }
     } catch (err) {
       console.error('Exception guardando pedido:', err);
@@ -1051,9 +1051,9 @@ export const useStore = create<AppState>()(
       if (orderUpdate.items !== undefined) updateData.items = orderUpdate.items;
       if (orderUpdate.monto !== undefined) updateData.monto = orderUpdate.monto;
       
-      const { error } = await sb.from('direct_sales').update(updateData).eq('codigo', id);
+      const { error } = await sb.from('ventas_directas').update(updateData).eq('codigo', id);
       if (error) {
-        const { error: err2 } = await sb.from('pos_orders').update(updateData).eq('codigo', id);
+        const { error: err2 } = await sb.from('pedidos').update(updateData).eq('codigo', id);
         if (err2) console.error('Error actualizando pedido:', err2);
       }
     } catch (err) {
@@ -1073,9 +1073,9 @@ export const useStore = create<AppState>()(
     if (!sb) return
 
     try {
-      const { error } = await sb.from('direct_sales').delete().eq('codigo', id);
+      const { error } = await sb.from('ventas_directas').delete().eq('codigo', id);
       if (error) {
-        const { error: err2 } = await sb.from('pos_orders').delete().eq('codigo', id);
+        const { error: err2 } = await sb.from('pedidos').delete().eq('codigo', id);
         if (err2) console.error('Error eliminando:', err2);
       }
     } catch (err) {
@@ -1092,16 +1092,16 @@ export const useStore = create<AppState>()(
     if (!sb) return
     
     const { data, error } = await sb
-      .from('direct_sales')
+      .from('ventas_directas')
       .select('*')
       .order('created_at', { ascending: false })
     
     if (error) {
       // Si la tabla no existe, fallback a pedidos filtrando directas
       if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('Tabla direct_sales no existe, usando pedidos como fallback')
+        console.warn('Tabla ventas_directas no existe, usando pedidos como fallback')
         const { data: fallbackData, error: fbError } = await sb
-          .from('pos_orders')
+          .from('pedidos')
           .select('*')
           .eq('tipo_venta', 'directo')
           .order('created_at', { ascending: false })
@@ -1179,7 +1179,7 @@ export const useStore = create<AppState>()(
     if (!supabase) return
     
     const { data, error } = await supabase
-      .from('pos_orders')
+      .from('pedidos')
       .select('*')
       .or('tipo_venta.is.null,tipo_venta.neq.directo')
       .order('created_at', { ascending: false })

@@ -43,9 +43,9 @@ export const dataService = {
 
   async getOrders(): Promise<Order[]> {
     if (!checkConfigured()) return [];
-    const { data: ventas, error: err1 } = await supabase.from('direct_sales').select('*').order('created_at', { ascending: false });
+    const { data: ventas, error: err1 } = await supabase.from('ventas_directas').select('*').order('created_at', { ascending: false });
     if (err1) throw err1;
-    const { data: pedidos, error: err2 } = await supabase.from('pos_orders').select('*').order('created_at', { ascending: false });
+    const { data: pedidos, error: err2 } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
     if (err2) throw err2;
     const all = [...(ventas || []), ...(pedidos || [])];
     const mapped = all.map((p: any) => ({
@@ -75,7 +75,7 @@ export const dataService = {
   async createOrder(order: Order): Promise<Order> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
     const isCompletada = order.estado === 'completado';
-    const table = isCompletada ? 'direct_sales' : 'pos_orders';
+    const table = isCompletada ? 'ventas_directas' : 'pedidos';
     const { data, error } = await supabase.from(table).insert({
       codigo: order.id,
       cliente: order.cliente,
@@ -109,9 +109,9 @@ export const dataService = {
     if (updates.notas !== undefined) updateData.notas = updates.notas;
     if (updates.items !== undefined) updateData.items = updates.items;
     if (updates.monto !== undefined) updateData.monto = updates.monto;
-    const { error: err1 } = await supabase.from('direct_sales').update(updateData).eq('codigo', id);
+    const { error: err1 } = await supabase.from('ventas_directas').update(updateData).eq('codigo', id);
     if (err1) {
-      const { error: err2 } = await supabase.from('pos_orders').update(updateData).eq('codigo', id);
+      const { error: err2 } = await supabase.from('pedidos').update(updateData).eq('codigo', id);
       if (err2) throw err2;
     }
   },
