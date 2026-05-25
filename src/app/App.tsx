@@ -205,8 +205,7 @@ function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
   const fetchProductsFromSupabase = useStore((state) => state.fetchProductsFromSupabase);
   const fetchCategoriesFromSupabase = useStore((state) => state.fetchCategoriesFromSupabase);
-  const fetchOrdersFromSupabase = useStore((state) => state.fetchOrdersFromSupabase);
-  const fetchReservasPOSFromSupabase = useStore((state) => state.fetchReservasPOSFromSupabase);
+  const fetchDirectSalesFromSupabase = useStore((state) => state.fetchDirectSalesFromSupabase);
   const fetchReservas = useAdminStore((state) => state.fetchReservas);
   const fetchConsultas = useAdminStore((state) => state.fetchConsultas);
   const fetchClientes = useAdminStore((state) => state.fetchClientes);
@@ -218,8 +217,7 @@ function App() {
   useEffect(() => {
     fetchProductsFromSupabase()
     fetchCategoriesFromSupabase()
-    fetchOrdersFromSupabase()
-    fetchReservasPOSFromSupabase()
+    fetchDirectSalesFromSupabase()
     fetchReservas()
     fetchConsultas()
     fetchClientes()

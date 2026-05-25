@@ -315,7 +315,7 @@ export const mockReservas: Reserva[] = [
     whatsapp_revisado: true,
     comprobante_verificado: false,
     abono_confirmado: false,
-    origen: 'tienda',
+    origen: 'store',
     abonos: [],
     items: [
       { id: 'RI-004', reserva_id: 'RES-002', producto_id: '4', producto_nombre: 'Pan Multigrano', cantidad: 2, precio_unitario: 4.50, subtotal: 9.00 },
@@ -339,7 +339,7 @@ export const mockReservas: Reserva[] = [
     whatsapp_revisado: false,
     comprobante_verificado: false,
     abono_confirmado: false,
-    origen: 'tienda',
+    origen: 'store',
     abonos: [],
     items: [
       { id: 'RI-006', reserva_id: 'RES-003', producto_id: '8', producto_nombre: 'Café Latte', cantidad: 3, precio_unitario: 4.00, subtotal: 12.00 },
@@ -363,7 +363,7 @@ export const mockReservas: Reserva[] = [
     whatsapp_revisado: true,
     comprobante_verificado: false,
     abono_confirmado: false,
-    origen: 'tienda',
+    origen: 'store',
     abonos: [],
     items: [
       { id: 'RI-008', reserva_id: 'RES-004', producto_id: '1', producto_nombre: 'Baguette Frances', cantidad: 6, precio_unitario: 2.50, subtotal: 15.00 },

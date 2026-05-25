@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../../../store';
-import { Order, THEME_PRESETS, ThemeType, MetodoPago, Product } from '../../../../types';
+import { Reserva, THEME_PRESETS, ThemeType, MetodoPago, Product } from '../../../../types';
 
 type FiltroAbono = 'todas' | 'sin_abono' | 'con_abono' | 'completado' | 'enviadas';
 
@@ -10,55 +10,57 @@ export default function ReservasPOSPage() {
   const themeColors = THEME_PRESETS[theme] ?? THEME_PRESETS.moderno;
   const isEjecutivo = theme === 'ejecutivo';
 
-  const reservasPos = useStore(state => state.reservasPos);
-  const updateOrder = useStore(state => state.updateOrder);
-  const deleteOrder = useStore(state => state.deleteOrder);
+  const allReservas = useStore(state => state.reservas);
+  const updateReserva = useStore(state => state.updateReserva);
+  const deleteReserva = useStore(state => state.deleteReserva);
   const allProducts = useStore(state => state.products);
+
+  const reservas = useMemo(() => allReservas.filter(r => r.origen === 'pos'), [allReservas]);
 
   const [filtroAbono, setFiltroAbono] = useState<FiltroAbono>('todas');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedReserva, setSelectedReserva] = useState<Order | null>(null);
+  const [selectedReserva, setSelectedReserva] = useState<Reserva | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [editStatus, setEditStatus] = useState<Order['estado']>('pendiente');
+  const [editStatus, setEditStatus] = useState<Reserva['estado_reserva']>('pendiente');
   const [editMontoPagado, setEditMontoPagado] = useState('');
-  const [editItems, setEditItems] = useState<Order['items']>([]);
+  const [editItems, setEditItems] = useState<Reserva['items']>([]);
   const [editNotas, setEditNotas] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   const filteredReservas = useMemo(() => {
-    let result = reservasPos;
+    let result = reservas;
 
     if (filtroAbono === 'sin_abono') {
-      result = result.filter(r => r.estado === 'pendiente');
+      result = result.filter(r => r.estado_reserva === 'pendiente');
     } else if (filtroAbono === 'con_abono') {
-      result = result.filter(r => r.estado === 'abonado');
+      result = result.filter(r => r.estado_reserva === 'abonado');
     } else if (filtroAbono === 'completado') {
-      result = result.filter(r => r.estado === 'completado');
+      result = result.filter(r => r.estado_reserva === 'confirmado');
     } else if (filtroAbono === 'enviadas') {
-      result = result.filter(r => r.notas && r.notas.trim().length > 0);
+      result = result.filter(r => r.notas_admin && r.notas_admin.trim().length > 0);
     }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(r =>
-        r.cliente.toLowerCase().includes(q) ||
+        (r.cliente_nombre || '').toLowerCase().includes(q) ||
         r.id.toLowerCase().includes(q) ||
-        (r.telefono && r.telefono.includes(q))
+        (r.cliente_telefono && r.cliente_telefono.includes(q))
       );
     }
 
     return result;
-  }, [reservasPos, filtroAbono, searchQuery]);
+  }, [reservas, filtroAbono, searchQuery]);
 
   const stats = useMemo(() => {
-    const sinAbono = reservasPos.filter(r => r.estado === 'pendiente').length;
-    const conAbono = reservasPos.filter(r => r.estado === 'abonado').length;
-    const completado = reservasPos.filter(r => r.estado === 'completado').length;
-    const totalValor = reservasPos.reduce((s, r) => s + r.monto, 0);
-    const totalAbonado = reservasPos.reduce((s, r) => s + (r.monto_pagado || 0), 0);
+    const sinAbono = reservas.filter(r => r.estado_reserva === 'pendiente').length;
+    const conAbono = reservas.filter(r => r.estado_reserva === 'abonado').length;
+    const completado = reservas.filter(r => r.estado_reserva === 'confirmado').length;
+    const totalValor = reservas.reduce((s, r) => s + r.total, 0);
+    const totalAbonado = reservas.reduce((s, r) => s + r.abono, 0);
     return { sinAbono, conAbono, completado, totalValor, totalAbonado };
-  }, [reservasPos]);
+  }, [reservas]);
 
   const filteredProducts = useMemo(() => {
     if (!productSearch || !allProducts) return [];
@@ -70,7 +72,7 @@ export default function ReservasPOSPage() {
   }, [allProducts, productSearch]);
 
   const editTotal = useMemo(() => {
-    return editItems.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
+    return (editItems || []).reduce((sum, item) => sum + (item.precio_unitario || 0) * (item.cantidad || 0), 0);
   }, [editItems]);
 
   const abonoNum = editMontoPagado ? parseFloat(editMontoPagado) : 0;
@@ -79,18 +81,18 @@ export default function ReservasPOSPage() {
   useEffect(() => {
     if (selectedReserva && editMode) {
       setEditItems(selectedReserva.items ? [...selectedReserva.items] : []);
-      setEditStatus(selectedReserva.estado);
-      setEditMontoPagado(String(selectedReserva.monto_pagado || ''));
-      setEditNotas(selectedReserva.notas || '');
+      setEditStatus(selectedReserva.estado_reserva);
+      setEditMontoPagado(String(selectedReserva.abono || ''));
+      setEditNotas(selectedReserva.notas_admin || '');
     }
   }, [selectedReserva, editMode]);
 
-  const handleOpenDetails = (r: Order) => {
+  const handleOpenDetails = (r: Reserva) => {
     setSelectedReserva(r);
-    setEditStatus(r.estado);
-    setEditMontoPagado(String(r.monto_pagado || ''));
+    setEditStatus(r.estado_reserva);
+    setEditMontoPagado(String(r.abono || ''));
     setEditItems(r.items ? [...r.items] : []);
-    setEditNotas(r.notas || '');
+    setEditNotas(r.notas_admin || '');
     setEditMode(false);
     setProductSearch('');
     setShowProductDropdown(false);
@@ -100,22 +102,25 @@ export default function ReservasPOSPage() {
     if (selectedReserva) {
       let finalStatus = editStatus;
       if (editStatus === 'abonado' && abonoNum >= editTotal) {
-        finalStatus = 'completado';
+        finalStatus = 'confirmado';
       }
-      const updateData: Partial<Order> = {
-        estado: finalStatus,
+      const updateData: Partial<Reserva> = {
+        estado_reserva: finalStatus,
         items: editItems,
-        monto: editTotal,
-        notas: editNotas,
+        total: editTotal,
+        notas_admin: editNotas,
       };
       if (finalStatus === 'abonado') {
-        updateData.monto_pagado = abonoNum;
-      } else if (finalStatus === 'completado') {
-        updateData.monto_pagado = editTotal;
+        updateData.abono = abonoNum;
+        updateData.saldo = editTotal - abonoNum;
+      } else if (finalStatus === 'confirmado') {
+        updateData.abono = editTotal;
+        updateData.saldo = 0;
       } else if (finalStatus === 'pendiente') {
-        updateData.monto_pagado = 0;
+        updateData.abono = 0;
+        updateData.saldo = editTotal;
       }
-      updateOrder(selectedReserva.id, updateData);
+      updateReserva(selectedReserva.id, updateData);
       setSelectedReserva({ ...selectedReserva, ...updateData });
       setEditMode(false);
     }
@@ -123,34 +128,37 @@ export default function ReservasPOSPage() {
 
   const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de eliminar esta reserva?')) {
-      deleteOrder(id);
+      deleteReserva(id);
       setSelectedReserva(null);
     }
   };
 
   const updateItemQty = (idx: number, qty: number) => {
     if (qty <= 0) {
-      setEditItems(prev => prev.filter((_, i) => i !== idx));
+      setEditItems(prev => (prev || []).filter((_, i) => i !== idx));
     } else {
-      setEditItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: qty } : item));
+      setEditItems(prev => (prev || []).map((item, i) => i === idx ? { ...item, cantidad: qty } : item));
     }
   };
 
   const addProductToItems = (product: Product) => {
-    const existingIdx = editItems.findIndex(item => item.productId === product.id);
+    const existingIdx = (editItems || []).findIndex(item => item.producto_id === product.id);
     if (existingIdx >= 0) {
-      setEditItems(prev => prev.map((item, i) =>
-        i === existingIdx ? { ...item, quantity: item.quantity + 1 } : item
+      setEditItems(prev => (prev || []).map((item, i) =>
+        i === existingIdx ? { ...item, cantidad: item.cantidad + 1 } : item
       ));
     } else {
       const price = product.en_liquidacion && product.precio_liquidacion ? product.precio_liquidacion : product.price;
-      setEditItems(prev => [...prev, {
-        productId: product.id,
-        productName: product.name,
-        productCode: product.codigo || '',
-        quantity: 1,
-        price,
-      }]);
+      const newItem: Reserva['items'][0] = {
+        id: '',
+        reserva_id: selectedReserva?.id || '',
+        producto_id: product.id,
+        producto_nombre: product.name,
+        cantidad: 1,
+        precio_unitario: price,
+        subtotal: price,
+      };
+      setEditItems(prev => [...(prev || []), newItem]);
     }
     setProductSearch('');
     setShowProductDropdown(false);
@@ -165,17 +173,17 @@ export default function ReservasPOSPage() {
     }
   };
 
-  const handlePrint = (order: Order) => {
+  const handlePrint = (order: Reserva) => {
     const printWin = window.open('', '_blank');
     if (!printWin) return;
     const itemsHtml = order.items?.map(item => `
       <tr>
-        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px">${item.quantity}x</td>
-        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px">${item.productName}</td>
-        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px;text-align:right">$${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
+        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px">${item.cantidad}x</td>
+        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px">${item.producto_nombre}</td>
+        <td style="padding:4px 8px;border-bottom:1px dashed #ddd;font-size:12px;text-align:right">$${((item.precio_unitario || 0) * (item.cantidad || 0)).toFixed(2)}</td>
       </tr>
     `).join('') || '';
-    const saldo = (order.monto || 0) - (order.monto_pagado || 0);
+    const saldo = (order.total || 0) - (order.abono || 0);
     printWin.document.write(`
       <html><head><title>Reserva ${order.id}</title>
       <style>
@@ -192,17 +200,17 @@ export default function ReservasPOSPage() {
         <h1>${settings?.storeName || 'PAN E'}</h1>
         <h2>RESERVA POS</h2>
         <div class="info"><strong>ID:</strong> ${order.id}</div>
-        <div class="info"><strong>Cliente:</strong> ${order.cliente}</div>
-        ${order.telefono ? `<div class="info"><strong>Tel:</strong> ${order.telefono}</div>` : ''}
-        <div class="info"><strong>Fecha:</strong> ${order.fecha}</div>
+        <div class="info"><strong>Cliente:</strong> ${order.cliente_nombre || 'N/A'}</div>
+        ${order.cliente_telefono ? `<div class="info"><strong>Tel:</strong> ${order.cliente_telefono}</div>` : ''}
+        <div class="info"><strong>Fecha:</strong> ${order.fecha_reserva}</div>
         <div class="divider"></div>
         <table>${itemsHtml}</table>
         <div class="divider"></div>
-        <div class="total">Total: $${order.monto.toFixed(2)}</div>
-        <div class="info"><strong>Pagado:</strong> $${(order.monto_pagado || 0).toFixed(2)}</div>
+        <div class="total">Total: $${order.total.toFixed(2)}</div>
+        <div class="info"><strong>Pagado:</strong> $${(order.abono || 0).toFixed(2)}</div>
         ${saldo > 0 ? `<div class="info"><strong>Saldo:</strong> $${saldo.toFixed(2)}</div>` : ''}
-        <div class="info"><strong>Estado:</strong> ${order.estado === 'abonado' ? 'Con Abono' : order.estado === 'completado' ? 'Completado' : 'Sin Abono'}</div>
-        ${order.notas ? `<div class="info"><strong>Envío:</strong> ${order.notas}</div>` : ''}
+        <div class="info"><strong>Estado:</strong> ${order.estado_reserva === 'abonado' ? 'Con Abono' : order.estado_reserva === 'confirmado' ? 'Completado' : 'Sin Abono'}</div>
+        ${order.notas_admin ? `<div class="info"><strong>Envío:</strong> ${order.notas_admin}</div>` : ''}
         <div class="footer">¡Gracias por su compra!</div>
         <script>window.print();window.close();<\/script>
       </body></html>
@@ -309,23 +317,23 @@ export default function ReservasPOSPage() {
               <tr key={r.id} style={{ borderTop: `1px solid ${tc.border}` }}>
                 <td data-label="ID" style={{ padding: '12px 16px', fontSize: 12, color: tc.text, fontFamily: 'monospace' }}>{r.id}</td>
                 <td data-label="Cliente" style={{ padding: '12px 16px' }}>
-                  <div style={{ fontWeight: 500, color: tc.text, fontSize: 13 }}>{r.cliente}</div>
-                  {r.telefono && <div style={{ fontSize: 11, color: tc.textMuted }}>{r.telefono}</div>}
+                  <div style={{ fontWeight: 500, color: tc.text, fontSize: 13 }}>{r.cliente_nombre || 'N/A'}</div>
+                  {r.cliente_telefono && <div style={{ fontSize: 11, color: tc.textMuted }}>{r.cliente_telefono}</div>}
                 </td>
-                <td data-label="Total" style={{ padding: '12px 16px', fontSize: 13, color: tc.text, fontWeight: 600, textAlign: 'right' }}>${r.monto.toFixed(2)}</td>
-                <td data-label="Pagado" style={{ padding: '12px 16px', fontSize: 13, color: '#4ade80', fontWeight: 600, textAlign: 'right' }}>${(r.monto_pagado || 0).toFixed(2)}</td>
+                <td data-label="Total" style={{ padding: '12px 16px', fontSize: 13, color: tc.text, fontWeight: 600, textAlign: 'right' }}>${r.total.toFixed(2)}</td>
+                <td data-label="Pagado" style={{ padding: '12px 16px', fontSize: 13, color: '#4ade80', fontWeight: 600, textAlign: 'right' }}>${(r.abono || 0).toFixed(2)}</td>
                 <td data-label="Estado" style={{ padding: '12px 16px', textAlign: 'center' }}>
                   <span style={{
                     padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 500,
-                    background: r.estado === 'abonado' ? 'rgba(6,182,212,0.15)' : r.estado === 'completado' ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.15)',
-                    color: r.estado === 'abonado' ? '#06b6d4' : r.estado === 'completado' ? '#4ade80' : '#f59e0b'
+                    background: r.estado_reserva === 'abonado' ? 'rgba(6,182,212,0.15)' : r.estado_reserva === 'confirmado' ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.15)',
+                    color: r.estado_reserva === 'abonado' ? '#06b6d4' : r.estado_reserva === 'confirmado' ? '#4ade80' : '#f59e0b'
                   }}>
-                    {r.estado === 'abonado' ? 'Con Abono' : r.estado === 'completado' ? 'Completado' : 'Sin Abono'}
+                    {r.estado_reserva === 'abonado' ? 'Con Abono' : r.estado_reserva === 'confirmado' ? 'Completado' : 'Sin Abono'}
                   </span>
                 </td>
                 <td data-label="Envío" style={{ textAlign: 'center', fontSize: 16 }}>
-                  {r.notas && r.notas.trim() ? (
-                    <span title={r.notas} style={{ cursor: 'help' }}>✅</span>
+                  {r.notas_admin && r.notas_admin.trim() ? (
+                    <span title={r.notas_admin} style={{ cursor: 'help' }}>✅</span>
                   ) : (
                     <span style={{ color: tc.textMuted, fontSize: 12 }}>❌</span>
                   )}
@@ -367,12 +375,12 @@ export default function ReservasPOSPage() {
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12, color: tc.textMuted }}>Nombre:</span>
-                  <span style={{ fontSize: 13, color: tc.text, fontWeight: 500 }}>{selectedReserva.cliente}</span>
+                  <span style={{ fontSize: 13, color: tc.text, fontWeight: 500 }}>{selectedReserva.cliente_nombre || 'N/A'}</span>
                 </div>
-                {selectedReserva.telefono && (
+                {selectedReserva.cliente_telefono && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: tc.textMuted }}>Teléfono:</span>
-                    <span style={{ fontSize: 13, color: tc.text }}>{selectedReserva.telefono}</span>
+                    <span style={{ fontSize: 13, color: tc.text }}>{selectedReserva.cliente_telefono}</span>
                   </div>
                 )}
               </div>
@@ -384,12 +392,12 @@ export default function ReservasPOSPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <select
                     value={editStatus}
-                    onChange={e => setEditStatus(e.target.value as Order['estado'])}
+                    onChange={e => setEditStatus(e.target.value as Reserva['estado_reserva'])}
                     style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${tc.border}`, background: tc.background, color: tc.text }}
                   >
                     <option value="pendiente">Sin Abono</option>
                     <option value="abonado">Con Abono</option>
-                    <option value="completado">Completado</option>
+                    <option value="confirmado">Completado</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
                   {editStatus === 'abonado' && (
@@ -412,7 +420,7 @@ export default function ReservasPOSPage() {
                       )}
                     </div>
                   )}
-                  {editStatus === 'completado' && (
+                  {editStatus === 'confirmado' && (
                     <div>
                       <label style={{ fontSize: 11, color: tc.textMuted, display: 'block', marginBottom: 4 }}>ENVÍO POR</label>
                       <input
@@ -428,15 +436,15 @@ export default function ReservasPOSPage() {
               ) : (
                 <span style={{
                   padding: '4px 8px', borderRadius: 4, fontSize: 12, fontWeight: 500,
-                  background: selectedReserva.estado === 'abonado' ? 'rgba(6,182,212,0.15)' : selectedReserva.estado === 'completado' ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.15)',
-                  color: selectedReserva.estado === 'abonado' ? '#06b6d4' : selectedReserva.estado === 'completado' ? '#4ade80' : '#f59e0b'
+                  background: selectedReserva.estado_reserva === 'abonado' ? 'rgba(6,182,212,0.15)' : selectedReserva.estado_reserva === 'confirmado' ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.15)',
+                  color: selectedReserva.estado_reserva === 'abonado' ? '#06b6d4' : selectedReserva.estado_reserva === 'confirmado' ? '#4ade80' : '#f59e0b'
                 }}>
-                  {selectedReserva.estado === 'abonado' ? 'Con Abono' : selectedReserva.estado === 'completado' ? 'Completado' : 'Sin Abono'}
+                  {selectedReserva.estado_reserva === 'abonado' ? 'Con Abono' : selectedReserva.estado_reserva === 'confirmado' ? 'Completado' : 'Sin Abono'}
                 </span>
               )}
-              {!editMode && selectedReserva.notas && (
+              {!editMode && selectedReserva.notas_admin && (
                 <div style={{ marginTop: 8, padding: '8px 12px', background: tc.background, borderRadius: 8, fontSize: 12, color: tc.textMuted }}>
-                  <span style={{ fontWeight: 500, color: tc.text }}>Envío:</span> {selectedReserva.notas}
+                  <span style={{ fontWeight: 500, color: tc.text }}>Envío:</span> {selectedReserva.notas_admin}
                 </div>
               )}
             </div>
@@ -445,28 +453,28 @@ export default function ReservasPOSPage() {
               <p style={{ fontSize: 12, color: tc.textMuted, margin: '0 0 4px' }}>Productos</p>
               {editMode ? (
                 <div style={{ background: tc.background, borderRadius: 8, padding: 12 }}>
-                  {editItems.map((item, idx) => (
+                  {(editItems || []).map((item, idx) => (
                     <div key={idx} style={{
                       display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
-                      borderBottom: idx < editItems.length - 1 ? `1px solid ${tc.border}` : 'none'
+                      borderBottom: idx < (editItems?.length || 0) - 1 ? `1px solid ${tc.border}` : 'none'
                     }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, color: tc.text }}>{item.productName}</div>
-                        <div style={{ fontSize: 11, color: tc.textMuted }}>${Number(item.price || 0).toFixed(2)} c/u</div>
+                        <div style={{ fontSize: 12, color: tc.text }}>{item.producto_nombre}</div>
+                        <div style={{ fontSize: 11, color: tc.textMuted }}>${Number(item.precio_unitario || 0).toFixed(2)} c/u</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <button
-                          onClick={() => updateItemQty(idx, item.quantity - 1)}
+                          onClick={() => updateItemQty(idx, item.cantidad - 1)}
                           style={{ width: 24, height: 24, borderRadius: 4, background: tc.border, border: 'none', color: tc.text, cursor: 'pointer', fontSize: 14 }}
                         >-</button>
-                        <span style={{ fontSize: 12, color: tc.text, minWidth: 20, textAlign: 'center' }}>{item.quantity}</span>
+                        <span style={{ fontSize: 12, color: tc.text, minWidth: 20, textAlign: 'center' }}>{item.cantidad}</span>
                         <button
-                          onClick={() => updateItemQty(idx, item.quantity + 1)}
+                          onClick={() => updateItemQty(idx, item.cantidad + 1)}
                           style={{ width: 24, height: 24, borderRadius: 4, background: tc.border, border: 'none', color: tc.text, cursor: 'pointer', fontSize: 14 }}
                         >+</button>
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 600, color: tc.text, minWidth: 50, textAlign: 'right' }}>
-                        ${Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                        ${Number((item.precio_unitario || 0) * (item.cantidad || 0)).toFixed(2)}
                       </span>
                       <button
                         onClick={() => updateItemQty(idx, 0)}
@@ -504,8 +512,8 @@ export default function ReservasPOSPage() {
                 <div style={{ background: tc.background, borderRadius: 8, padding: 12 }}>
                   {selectedReserva.items?.map((item, idx) => (
                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: idx < (selectedReserva.items?.length || 0) - 1 ? `1px solid ${tc.border}` : 'none' }}>
-                      <span style={{ color: tc.text }}>{item.productName} x{item.quantity}</span>
-                      <span style={{ color: tc.textMuted }}>${Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}</span>
+                      <span style={{ color: tc.text }}>{item.producto_nombre} x{item.cantidad}</span>
+                      <span style={{ color: tc.textMuted }}>${Number((item.precio_unitario || 0) * (item.cantidad || 0)).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -516,7 +524,7 @@ export default function ReservasPOSPage() {
               <div>
                 <p style={{ fontSize: 12, color: tc.textMuted, margin: '0 0 4px' }}>Total</p>
                 <p style={{ fontSize: 18, fontWeight: 600, color: tc.text, margin: 0 }}>
-                  ${editMode ? editTotal.toFixed(2) : Number(selectedReserva.monto || 0).toFixed(2)}
+                  ${editMode ? editTotal.toFixed(2) : Number(selectedReserva.total || 0).toFixed(2)}
                 </p>
               </div>
               <div>
@@ -524,7 +532,7 @@ export default function ReservasPOSPage() {
                 <p style={{ fontSize: 18, fontWeight: 600, color: '#4ade80', margin: 0 }}>
                   ${editMode && editStatus === 'abonado'
                     ? abonoNum.toFixed(2)
-                    : Number(selectedReserva.monto_pagado || 0).toFixed(2)}
+                    : Number(selectedReserva.abono || 0).toFixed(2)}
                 </p>
               </div>
             </div>

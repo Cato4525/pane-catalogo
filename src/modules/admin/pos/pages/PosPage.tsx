@@ -1,11 +1,19 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../../../../store'
 import { useAdminStore } from '../../../../store/adminStore'
-import { Order, OrderItem, MetodoPago, Product, THEME_PRESETS, ThemeType } from '../../../../types'
+import { DirectSale, DirectSaleItem, Reserva, MetodoPago, Product, THEME_PRESETS, ThemeType } from '../../../../types'
 
 interface CartItem {
   product: Product
   quantity: number
+}
+
+type TempSaleItem = {
+  productId: string
+  productName: string
+  productCode?: string
+  quantity: number
+  price: number
 }
 
 export default function PosPage() {
@@ -17,9 +25,10 @@ export default function PosPage() {
   const allProducts = useStore(state => state.products)
   const categories = useStore(state => state.categories)
   const clientes = useAdminStore(state => state.clientes)
-  const addOrder = useStore(state => state.addOrder)
-  const orders = useStore(state => state.orders)
-  const reservasPos = useStore(state => state.reservasPos)
+  const addDirectSale = useStore(state => state.addDirectSale)
+  const addReserva = useStore(state => state.addReserva)
+  const directSales = useStore(state => state.directSales)
+  const reservas = useStore(state => state.reservas)
 
   const products = useMemo(() => 
     allProducts.filter(p => p.status === 'active' && p.stock > 0), 
@@ -37,7 +46,8 @@ export default function PosPage() {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo')
   const [montoRecibido, setMontoRecibido] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
-  const [lastOrder, setLastOrder] = useState<Order | null>(null)
+  const [lastOrder, setLastOrder] = useState<DirectSale | null>(null)
+  const [lastReserva, setLastReserva] = useState<Reserva | null>(null)
   const [transferImage, setTransferImage] = useState<string>('')
   const [cardLast4, setCardLast4] = useState('')
   const [cardAutori, setCardAutori] = useState('')
@@ -182,7 +192,7 @@ export default function PosPage() {
 
     setErrors({})
 
-    const orderItems: OrderItem[] = cart.map(item => ({
+    const saleItems: TempSaleItem[] = cart.map(item => ({
       productId: item.product.id,
       productName: item.product.name,
       productCode: item.product.codigo || '',
@@ -192,29 +202,83 @@ export default function PosPage() {
         : item.product.price
     }))
 
-    const newOrder: Order = {
-      id: `PED-${Date.now()}`,
-      cliente: selectedClientData?.nombre || 'Cliente mostrador',
-      clienteId: selectedClient || undefined,
-      email: selectedClientData?.email || '',
-      telefono: selectedClientData?.telefono || '',
-      direccion: selectedClientData?.direccion || '',
-      ciudad: selectedClientData?.ciudad || '',
-      items: orderItems,
-      monto: total,
-      estado: saleType === 'directo' ? 'completado' : (conAbono ? 'abonado' : 'pendiente'),
-      fecha: new Date().toISOString().split('T')[0],
-      metodo_pago: metodoPago,
-      monto_pagado: saleType === 'directo' ? total : (conAbono ? (abonoMonto ? parseFloat(abonoMonto) : 0) : 0),
-      cambio: cambio > 0 ? cambio : undefined,
-      transferencia_imagen: metodoPago === 'transferencia' ? transferImage : undefined,
-      tarjeta_last4: metodoPago === 'tarjeta' ? cardLast4 : undefined,
-      tarjeta_autori: metodoPago === 'tarjeta' ? cardAutori : undefined,
-      factura_generada: generarFactura
-    }
+    const codigo = `PED-${Date.now()}`
+    const fecha = new Date().toISOString().split('T')[0]
 
-    addOrder(newOrder)
-    setLastOrder(newOrder)
+    if (saleType === 'directo') {
+      const newSale: DirectSale = {
+        id: codigo,
+        cliente: selectedClientData?.nombre || 'Cliente mostrador',
+        clienteId: selectedClient || undefined,
+        email: selectedClientData?.email || '',
+        telefono: selectedClientData?.telefono || '',
+        direccion: selectedClientData?.direccion || '',
+        ciudad: selectedClientData?.ciudad || '',
+        items: saleItems,
+        monto: total,
+        estado: 'completado',
+        fecha,
+        metodo_pago: metodoPago,
+        monto_pagado: total,
+        cambio: cambio > 0 ? cambio : undefined,
+        transferencia_imagen: metodoPago === 'transferencia' ? transferImage : undefined,
+        tarjeta_last4: metodoPago === 'tarjeta' ? cardLast4 : undefined,
+        tarjeta_autori: metodoPago === 'tarjeta' ? cardAutori : undefined,
+        factura_generada: generarFactura,
+      }
+      console.log("Guardando venta en direct_sales");
+      addDirectSale(newSale)
+      setLastOrder(newSale)
+    } else {
+      const montoAbono = conAbono && abonoMonto ? parseFloat(abonoMonto) : 0
+      const itemsReserva = saleItems.map(i => ({
+        id: '',
+        reserva_id: codigo,
+        producto_id: i.productId,
+        producto_nombre: i.productName,
+        cantidad: i.quantity,
+        precio_unitario: i.price,
+        subtotal: i.price * i.quantity,
+      }))
+      const newReserva: Reserva = {
+        id: codigo,
+        codigo,
+        cliente_id: selectedClient || '',
+        cliente_nombre: selectedClientData?.nombre || 'Cliente mostrador',
+        cliente_telefono: selectedClientData?.telefono || '',
+        cliente_cedula: selectedClientData?.documento || '',
+        cliente_ciudad: selectedClientData?.ciudad || '',
+        cliente_direccion: selectedClientData?.direccion || '',
+        cliente_email: selectedClientData?.email || '',
+        estado_reserva: conAbono ? 'abonado' : 'pendiente',
+        total,
+        abono: montoAbono,
+        saldo: total - montoAbono,
+        comprobante_url: metodoPago === 'transferencia' ? transferImage : null,
+        fecha_reserva: fecha,
+        fecha_limite_abono: null,
+        fecha_limite_pago: null,
+        notas_admin: null,
+        whatsapp_revisado: false,
+        comprobante_verificado: false,
+        abono_confirmado: false,
+        origen: 'pos',
+        items: itemsReserva,
+        abonos: [],
+      }
+      console.log("Guardando reserva POS en reservations, origen: pos");
+      addReserva(newReserva)
+      setLastReserva(newReserva)
+      ;(async () => {
+        const { dataService } = await import('../../../../services/dataService')
+        try {
+          const saved = await dataService.createReserva(newReserva)
+          console.log("Reserva POS guardada en Supabase:", saved)
+        } catch (err) {
+          console.error("Error guardando reserva POS en Supabase:", err)
+        }
+      })()
+    }
     setShowReceipt(true)
   }
 
@@ -226,12 +290,20 @@ export default function PosPage() {
     setMontoRecibido('')
     setShowReceipt(false)
     setLastOrder(null)
+    setLastReserva(null)
     setIsSaleActive(false)
   }
 
   const tc = themeColors;
 
-  if (showReceipt && lastOrder) {
+  const receiptSale = lastOrder
+  const receiptReserva = lastReserva
+
+  if (showReceipt && (receiptSale || receiptReserva)) {
+    const displayId = receiptSale?.id || receiptReserva?.codigo || ''
+    const displayItems = receiptSale?.items || receiptReserva?.items?.map(i => ({ productName: i.producto_nombre || '', quantity: i.cantidad, price: i.precio_unitario })) || []
+    const displayTotal = receiptSale?.monto || receiptReserva?.total || 0
+    const isSale = !!receiptSale
     return (
       <div style={{ animation: 'fadeUp .4s ease' }}>
         <div style={{ maxWidth: 400, margin: '0 auto' }} className="print-container">
@@ -242,12 +314,12 @@ export default function PosPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Venta Completada</h2>
-              <p style={{ margin: '4px 0 0', color: '#666', fontSize: 12 }}>{lastOrder.id}</p>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{isSale ? 'Venta Completada' : 'Reserva Registrada'}</h2>
+              <p style={{ margin: '4px 0 0', color: '#666', fontSize: 12 }}>{displayId}</p>
             </div>
 
             <div style={{ borderTop: '1px dashed #ccc', borderBottom: '1px dashed #ccc', padding: '12px 0', marginBottom: 12 }}>
-              {lastOrder.items.map((item, idx) => (
+              {displayItems.map((item: any, idx: number) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                   <span>{item.quantity}x {item.productName}</span>
                   <span>${(item.price * item.quantity).toFixed(2)}</span>
@@ -257,48 +329,58 @@ export default function PosPage() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
               <span>TOTAL</span>
-              <span>${lastOrder.monto.toFixed(2)}</span>
+              <span>${displayTotal.toFixed(2)}</span>
             </div>
 
-            <div style={{ fontSize: 11, color: '#666', marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 6 }}>
-              <div><strong>Método:</strong> {lastOrder.metodo_pago === 'efectivo' ? 'Efectivo' : lastOrder.metodo_pago === 'transferencia' ? 'Transferencia' : 'Tarjeta'}</div>
-              {lastOrder.metodo_pago === 'tarjeta' && lastOrder.tarjeta_last4 && (
-                <div><strong>Tarjeta:</strong> **** {lastOrder.tarjeta_last4}</div>
-              )}
-              {lastOrder.metodo_pago === 'tarjeta' && lastOrder.tarjeta_autori && (
-                <div><strong>Autorización:</strong> {lastOrder.tarjeta_autori}</div>
-              )}
-              {lastOrder.metodo_pago === 'transferencia' && lastOrder.transferencia_imagen && (
-                <div style={{ marginTop: 8 }}>
-                  <strong>Comprobante:</strong>
-                  <img src={lastOrder.transferencia_imagen} alt="Comprobante" style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4, marginTop: 4 }} />
-                </div>
-              )}
-            </div>
+            {receiptSale?.metodo_pago && (
+              <div style={{ fontSize: 11, color: '#666', marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 6 }}>
+                <div><strong>Método:</strong> {receiptSale.metodo_pago === 'efectivo' ? 'Efectivo' : receiptSale.metodo_pago === 'transferencia' ? 'Transferencia' : 'Tarjeta'}</div>
+                {receiptSale.metodo_pago === 'tarjeta' && receiptSale.tarjeta_last4 && (
+                  <div><strong>Tarjeta:</strong> **** {receiptSale.tarjeta_last4}</div>
+                )}
+                {receiptSale.metodo_pago === 'tarjeta' && receiptSale.tarjeta_autori && (
+                  <div><strong>Autorización:</strong> {receiptSale.tarjeta_autori}</div>
+                )}
+                {receiptSale.metodo_pago === 'transferencia' && receiptSale.transferencia_imagen && (
+                  <div style={{ marginTop: 8 }}>
+                    <strong>Comprobante:</strong>
+                    <img src={receiptSale.transferencia_imagen} alt="Comprobante" style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4, marginTop: 4 }} />
+                  </div>
+                )}
+              </div>
+            )}
 
-            {lastOrder.monto_pagado && (
+            {receiptReserva && (
+              <div style={{ fontSize: 11, color: '#666', marginBottom: 8, padding: 8, background: '#fef3c7', borderRadius: 6 }}>
+                <div><strong>Abono:</strong> ${receiptReserva.abono.toFixed(2)}</div>
+                <div><strong>Saldo:</strong> ${receiptReserva.saldo.toFixed(2)}</div>
+                <div><strong>Estado:</strong> {receiptReserva.estado_reserva}</div>
+              </div>
+            )}
+
+            {receiptSale && receiptSale.monto_pagado && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666' }}>
                   <span>Recibido</span>
-                  <span>${lastOrder.monto_pagado.toFixed(2)}</span>
+                  <span>${receiptSale.monto_pagado.toFixed(2)}</span>
                 </div>
-                {lastOrder.cambio && lastOrder.cambio > 0 && (
+                {receiptSale.cambio && receiptSale.cambio > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
                     <span>Cambio</span>
-                    <span>${lastOrder.cambio.toFixed(2)}</span>
+                    <span>${receiptSale.cambio.toFixed(2)}</span>
                   </div>
                 )}
               </>
             )}
 
             <div style={{ textAlign: 'center', marginTop: 20 }}>
-              {lastOrder.factura_generada && (
+              {receiptSale?.factura_generada && (
                 <div style={{ padding: 12, background: '#22c55e22', borderRadius: 8, marginBottom: 12 }}>
                   <p style={{ fontSize: 12, color: '#22c55e', margin: 0, fontWeight: 600 }}>✓ FACTURA GENERADA</p>
-                  <p style={{ fontSize: 10, color: '#666', margin: '4px 0 0' }}>{lastOrder.id}</p>
+                  <p style={{ fontSize: 10, color: '#666', margin: '4px 0 0' }}>{displayId}</p>
                 </div>
               )}
-              {(saleType === 'reservado' || saleType === 'abonado') && (
+              {!isSale && (
                 <div style={{ padding: 12, background: '#fef3c7', borderRadius: 8, marginBottom: 12, textAlign: 'left' }}>
                   <p style={{ margin: 0, fontSize: 11, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>⚠️ IMPORTANTE</p>
                   <p style={{ margin: 0, fontSize: 10, color: '#78350f', lineHeight: 1.4 }}>
@@ -377,7 +459,7 @@ export default function PosPage() {
               <div style={{ fontSize: 12, color: tc.textMuted }}>Ventas Hoy</div>
               {(() => {
                 const today = new Date().toISOString().split('T')[0];
-                const ventasHoy = orders.filter(o => o.estado === 'completado' && o.fecha === today);
+                const ventasHoy = directSales.filter(o => o.estado === 'completado' && o.fecha === today);
                 const totalVentasHoy = ventasHoy.reduce((sum, o) => sum + o.monto, 0);
                 return (
                   <>
@@ -392,9 +474,9 @@ export default function PosPage() {
               <div style={{ fontSize: 12, color: tc.textMuted }}>Reservas Hoy</div>
               {(() => {
                 const today = new Date().toISOString().split('T')[0];
-                const reservasHoy = reservasPos.filter(r => r.fecha === today);
-                const pendientes = reservasHoy.filter(r => r.estado === 'pendiente').length;
-                const conAbono = reservasHoy.filter(r => r.estado === 'abonado').length;
+                const reservasHoy = reservas.filter(r => r.origen === 'pos' && r.fecha_reserva?.startsWith(today));
+                const pendientes = reservasHoy.filter(r => r.estado_reserva === 'pendiente').length;
+                const conAbono = reservasHoy.filter(r => r.estado_reserva === 'abonado').length;
                 return (
                   <>
                     <div style={{ fontSize: 18, fontWeight: 700, color: tc.text }}>{reservasHoy.length}</div>

@@ -324,9 +324,9 @@ export interface SocialNetwork {
   active: boolean;
 }
 
-export type OrderStatus = 'pendiente' | 'procesando' | 'enviado' | 'completado' | 'cancelado' | 'abonado';
+export type SaleStatus = 'completado' | 'cancelado';
 
-export interface OrderItem {
+export interface DirectSaleItem {
   productId: string;
   productName: string;
   productCode?: string;
@@ -334,7 +334,7 @@ export interface OrderItem {
   price: number;
 }
 
-export interface Order {
+export interface DirectSale {
   id: string;
   cliente: string;
   clienteId?: string;
@@ -342,9 +342,9 @@ export interface Order {
   telefono: string;
   direccion: string;
   ciudad: string;
-  items: OrderItem[];
+  items: DirectSaleItem[];
   monto: number;
-  estado: OrderStatus;
+  estado: SaleStatus;
   fecha: string;
   notas?: string;
   metodo_pago?: MetodoPago;
@@ -461,7 +461,7 @@ export interface Reserva {
   abono_confirmado: boolean;
   items?: ReservaItem[];
   abonos?: Abono[];
-  origen: 'tienda' | 'pos';
+  origen: 'store' | 'pos';
 }
 
 export interface ReservaItem {

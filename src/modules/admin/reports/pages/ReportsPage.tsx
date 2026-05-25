@@ -18,10 +18,10 @@ export default function ReportsPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
-  const orders = useStore(state => state.orders);
+  const directSales = useStore(state => state.directSales);
   const products = useStore(state => state.products);
   const fetchProductsFromSupabase = useStore(state => state.fetchProductsFromSupabase);
-  const fetchOrdersFromSupabase = useStore(state => state.fetchOrdersFromSupabase);
+  const fetchDirectSalesFromSupabase = useStore(state => state.fetchDirectSalesFromSupabase);
   const reservas = useAdminStore(state => state.reservas);
   const consultas = useAdminStore(state => state.consultas);
   const fetchReservas = useAdminStore(state => state.fetchReservas);
@@ -29,20 +29,20 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (products.length === 0) fetchProductsFromSupabase()
-    if (orders.length === 0) fetchOrdersFromSupabase()
+    if (directSales.length === 0) fetchDirectSalesFromSupabase()
     if (reservas.length === 0) fetchReservas()
     if (consultas.length === 0) fetchConsultas()
   }, [])
 
   const filteredOrders = useMemo(() => {
-    if (!dateFrom && !dateTo) return orders;
-    return orders.filter(o => {
+    if (!dateFrom && !dateTo) return directSales;
+    return directSales.filter(o => {
       const orderDate = new Date(o.fecha);
       if (dateFrom && orderDate < new Date(dateFrom)) return false;
       if (dateTo && orderDate > new Date(dateTo)) return false;
       return true;
     });
-  }, [orders, dateFrom, dateTo]);
+  }, [directSales, dateFrom, dateTo]);
 
   const filteredReservas = useMemo(() => {
     if (!dateFrom && !dateTo) return reservas;

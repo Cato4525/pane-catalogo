@@ -155,7 +155,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
           cliente_telefono: formData.telefono,
           cliente_email: formData.email,
           mensaje: formData.direccion || '',
-          origen: 'tienda',
+        origen: 'store',
           created_at: now.toISOString(),
         }
         
@@ -326,7 +326,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
           precio_unitario: item.price,
           subtotal: item.price * item.qty,
         })),
-        origen: 'tienda',
+        origen: 'store',
         abonos: [],
       }
 

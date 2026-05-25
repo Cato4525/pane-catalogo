@@ -118,7 +118,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         whatsapp_revisado: r.whatsapp_revisado || false,
         comprobante_verificado: r.comprobante_verificado || false,
         abono_confirmado: r.abono_confirmado || false,
-        origen: r.origen || 'tienda',
+        origen: r.origen || 'store',
         abonos: r.abonos || [],
       }))
 
@@ -385,7 +385,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       whatsapp_revisado: reserva.whatsapp_revisado || false,
       comprobante_verificado: reserva.comprobante_verificado || false,
       abono_confirmado: reserva.abono_confirmado || false,
-      origen: reserva.origen || 'tienda',
+      origen: reserva.origen || 'store',
       abonos: reserva.abonos || [],
       items: reserva.items?.map((i: any) => ({
         id: i.id,

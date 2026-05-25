@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../../../../store';
-import { Order, OrderStatus, THEME_PRESETS, ThemeType, MetodoPago } from '../../../../types';
+import { DirectSale, SaleStatus, THEME_PRESETS, ThemeType, MetodoPago } from '../../../../types';
 
 export default function VentasPage() {
   const settings = useStore(state => state.settings);
@@ -8,29 +8,29 @@ export default function VentasPage() {
   const themeColors = THEME_PRESETS[theme] ?? THEME_PRESETS.moderno;
   const isEjecutivo = theme === 'ejecutivo';
   
-  const orders = useStore(state => state.orders);
-  const updateOrder = useStore(state => state.updateOrder);
-  const deleteOrder = useStore(state => state.deleteOrder);
+  const directSales = useStore(state => state.directSales);
+  const updateDirectSale = useStore(state => state.updateDirectSale);
+  const deleteDirectSale = useStore(state => state.deleteDirectSale);
   const [filter, setFilter] = useState('todos');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedSale, setSelectedSale] = useState<DirectSale | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [editStatus, setEditStatus] = useState<OrderStatus>('pendiente');
+  const [editStatus, setEditStatus] = useState<SaleStatus>('completado');
   const [editMontoPagado, setEditMontoPagado] = useState('');
   const [editNotas, setEditNotas] = useState('');
-  const [searchOrder, setSearchOrder] = useState('');
+  const [searchSale, setSearchSale] = useState('');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('all');
   const [metodoFilter, setMetodoFilter] = useState<MetodoPago | 'todos'>('todos');
 
-  const filteredOrders = useMemo(() => {
-    let result = orders;
+  const filteredSales = useMemo(() => {
+    let result = directSales;
     if (filter === 'enviadas') {
       result = result.filter(o => o.notas && o.notas.trim().length > 0);
     } else if (filter !== 'todos') {
       result = result.filter(o => o.estado === filter);
     }
     
-    if (searchOrder) {
-      const search = searchOrder.toLowerCase();
+    if (searchSale) {
+      const search = searchSale.toLowerCase();
       result = result.filter(o => 
         o.id.toLowerCase().includes(search) ||
         o.cliente.toLowerCase().includes(search) ||
@@ -57,42 +57,31 @@ export default function VentasPage() {
     }
 
     return result;
-  }, [orders, filter, searchOrder, dateFilter, metodoFilter]);
+  }, [directSales, filter, searchSale, dateFilter, metodoFilter]);
 
   const stats = useMemo(() => {
-    const totalVentas = filteredOrders.reduce((sum, o) => sum + o.monto, 0);
-    const totalPagado = filteredOrders.reduce((sum, o) => sum + (o.monto_pagado || 0), 0);
-    const completados = filteredOrders.filter(o => o.estado === 'completado').length;
-    const pendientes = filteredOrders.filter(o => o.estado === 'pendiente').length;
-    const abonos = filteredOrders.filter(o => o.estado === 'abonado').length;
-    return { totalVentas, totalPagado, completados, pendientes, abonos };
-  }, [filteredOrders]);
+    const totalVentas = filteredSales.reduce((sum, o) => sum + o.monto, 0);
+    const totalPagado = filteredSales.reduce((sum, o) => sum + (o.monto_pagado || 0), 0);
+    const completados = filteredSales.filter(o => o.estado === 'completado').length;
+    const cancelados = filteredSales.filter(o => o.estado === 'cancelado').length;
+    return { totalVentas, totalPagado, completados, cancelados };
+  }, [filteredSales]);
 
   const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de eliminar esta venta?')) {
-      deleteOrder(id);
-      setSelectedOrder(null);
+      deleteDirectSale(id);
+      setSelectedSale(null);
     }
   };
 
   const handleSaveEdit = () => {
-    if (selectedOrder) {
-      let finalStatus = editStatus;
-      if (editStatus === 'abonado' && editMontoPagado && parseFloat(editMontoPagado) >= selectedOrder.monto) {
-        finalStatus = 'completado';
-      }
-      const monto_pagado = editMontoPagado ? parseFloat(editMontoPagado) : selectedOrder.monto_pagado;
-      const updateData: Partial<Order> = {
-        estado: finalStatus,
+    if (selectedSale) {
+      const updateData: Partial<DirectSale> = {
+        estado: editStatus,
         notas: editNotas,
       };
-      if (finalStatus === 'abonado') {
-        updateData.monto_pagado = monto_pagado;
-      } else if (finalStatus === 'completado' || finalStatus === 'cancelado') {
-        updateData.monto_pagado = finalStatus === 'completado' ? selectedOrder.monto : 0;
-      }
-      updateOrder(selectedOrder.id, updateData);
-      setSelectedOrder({ ...selectedOrder, ...updateData });
+      updateDirectSale(selectedSale.id, updateData);
+      setSelectedSale({ ...selectedSale, ...updateData });
       setEditMode(false);
     }
   };
@@ -107,7 +96,7 @@ export default function VentasPage() {
     }
   };
 
-  const handlePrint = (order: Order) => {
+  const handlePrint = (order: DirectSale) => {
     const printWin = window.open('', '_blank');
     if (!printWin) return;
     const itemsHtml = (order.items || []).map(item => [
@@ -160,7 +149,7 @@ export default function VentasPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Ventas</h1>
-        <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Gestiona los pedidos y ventas del punto de venta</p>
+        <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Gestiona las ventas del punto de venta</p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
@@ -173,12 +162,8 @@ export default function VentasPage() {
           <div style={{ fontSize: 20, fontWeight: 700, color: '#4ade80' }}>{stats.completados}</div>
         </div>
         <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Reservados</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#fbbf24' }}>{stats.pendientes}</div>
-        </div>
-        <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Abonados</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#06b6d4' }}>{stats.abonos}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Cancelados</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#f87171' }}>{stats.cancelados}</div>
         </div>
         <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Pagado</div>
@@ -192,8 +177,8 @@ export default function VentasPage() {
           <input
             type="text"
             placeholder="Buscar por ID, cliente o teléfono..."
-            value={searchOrder}
-            onChange={e => setSearchOrder(e.target.value)}
+            value={searchSale}
+            onChange={e => setSearchSale(e.target.value)}
             style={{
               width: '100%', padding: '10px 12px 10px 40px', background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: 8, color: 'var(--text)', fontSize: 13, outline: 'none'
@@ -230,7 +215,7 @@ export default function VentasPage() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {['todos', 'enviadas', 'pendiente', 'abonado', 'completado', 'cancelado'].map(f => (
+        {['todos', 'enviadas', 'completado', 'cancelado'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -262,13 +247,13 @@ export default function VentasPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.length === 0 ? (
+              {filteredSales.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                     No se encontraron ventas
                   </td>
                 </tr>
-              ) : filteredOrders.map(order => {
+              ) : filteredSales.map(order => {
                 return (
                   <tr key={order.id}>
                     <td data-label="ID" className="font-mono text-sm" style={{ color: 'var(--text)' }}>{order.id}</td>
@@ -292,8 +277,8 @@ export default function VentasPage() {
                     </td>
                     <td data-label="Estado">
                       <span className="badge" style={{ 
-                        backgroundColor: order.estado === 'completado' ? 'rgba(34,197,94,0.15)' : order.estado === 'abonado' ? 'rgba(6,182,212,0.15)' : order.estado === 'pendiente' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: order.estado === 'completado' ? '#4ade80' : order.estado === 'abonado' ? '#06b6d4' : order.estado === 'pendiente' ? '#fbbf24' : '#f87171'
+                        backgroundColor: order.estado === 'completado' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: order.estado === 'completado' ? '#4ade80' : '#f87171'
                       }}>
                         {order.estado}
                       </span>
@@ -302,7 +287,7 @@ export default function VentasPage() {
                     <td data-label="Acciones">
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button 
-                          onClick={() => { setSelectedOrder(order); setEditStatus(order.estado); setEditMontoPagado(String(order.monto_pagado || '')); setEditMode(false); }}
+                          onClick={() => { setSelectedSale(order); setEditStatus(order.estado); setEditMontoPagado(String(order.monto_pagado || '')); setEditMode(false); }}
                           style={{ padding: '4px 8px', background: isEjecutivo ? '#000000' : 'rgba(100,116,139,0.2)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, color: isEjecutivo ? '#ffffff' : 'inherit' }}
                         >👁️</button>
                         <button 
@@ -320,21 +305,21 @@ export default function VentasPage() {
       </div>
 
       {/* Modal de detalles */}
-      {selectedOrder && (
+      {selectedSale && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }} onClick={() => setSelectedOrder(null)}>
+        }} onClick={() => setSelectedSale(null)}>
           <div style={{
             background: 'var(--surface)', borderRadius: 16, padding: 24, maxWidth: 500, width: '90%', maxHeight: '80vh', overflow: 'auto'
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>Detalles de Venta</h2>
-              <button onClick={() => setSelectedOrder(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setSelectedSale(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>ID Pedido</p>
-              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0, fontFamily: 'monospace' }}>{selectedOrder.id}</p>
+              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0, fontFamily: 'monospace' }}>{selectedSale.id}</p>
             </div>
 
             {/* Cliente */}
@@ -343,30 +328,30 @@ export default function VentasPage() {
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nombre:</span>
-                  <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{selectedOrder.cliente}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{selectedSale.cliente}</span>
                 </div>
-                {selectedOrder.telefono && (
+                {selectedSale.telefono && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Teléfono:</span>
-                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedOrder.telefono}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedSale.telefono}</span>
                   </div>
                 )}
-                {selectedOrder.email && (
+                {selectedSale.email && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Email:</span>
-                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedOrder.email}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedSale.email}</span>
                   </div>
                 )}
-                {selectedOrder.direccion && (
+                {selectedSale.direccion && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Dirección:</span>
-                    <span style={{ fontSize: 13, color: 'var(--text)', textAlign: 'right' }}>{selectedOrder.direccion}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)', textAlign: 'right' }}>{selectedSale.direccion}</span>
                   </div>
                 )}
-                {selectedOrder.ciudad && (
+                {selectedSale.ciudad && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ciudad:</span>
-                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedOrder.ciudad}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{selectedSale.ciudad}</span>
                   </div>
                 )}
               </div>
@@ -388,7 +373,7 @@ export default function VentasPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.items?.map((item, idx) => (
+                    {selectedSale.items?.map((item, idx) => (
                       <tr key={idx} style={{ borderTop: '1px solid var(--border)' }}>
                         <td style={{ padding: '8px 6px', color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: 10 }}>{(item.productId || '').slice(0, 8)}</td>
                         <td style={{ padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{item.productCode || '—'}</td>
@@ -407,24 +392,24 @@ export default function VentasPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Total</p>
-                <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)', margin: 0 }}>${Number(selectedOrder.monto || 0).toFixed(2)}</p>
+                <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)', margin: 0 }}>${Number(selectedSale.monto || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Pagado</p>
-                <p style={{ fontSize: 18, fontWeight: 600, color: '#4ade80', margin: 0 }}>${Number(selectedOrder.monto_pagado || 0).toFixed(2)}</p>
+                <p style={{ fontSize: 18, fontWeight: 600, color: '#4ade80', margin: 0 }}>${Number(selectedSale.monto_pagado || 0).toFixed(2)}</p>
               </div>
             </div>
 
-            {selectedOrder.cambio && selectedOrder.cambio > 0 && (
+            {selectedSale.cambio && selectedSale.cambio > 0 && (
               <div style={{ marginBottom: 16, padding: 12, background: 'rgba(34,197,94,0.15)', borderRadius: 8 }}>
-                <p style={{ fontSize: 12, color: '#4ade80', margin: 0 }}>Cambio: ${Number(selectedOrder.cambio || 0).toFixed(2)}</p>
+                <p style={{ fontSize: 12, color: '#4ade80', margin: 0 }}>Cambio: ${Number(selectedSale.cambio || 0).toFixed(2)}</p>
               </div>
             )}
 
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Cliente</p>
-              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0 }}>{selectedOrder.cliente}</p>
-              {selectedOrder.telefono && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selectedOrder.telefono}</p>}
+              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0 }}>{selectedSale.cliente}</p>
+              {selectedSale.telefono && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selectedSale.telefono}</p>}
             </div>
 
             <div style={{ marginBottom: 16 }}>
@@ -433,26 +418,12 @@ export default function VentasPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <select 
                     value={editStatus} 
-                    onChange={e => setEditStatus(e.target.value as OrderStatus)}
+                    onChange={e => setEditStatus(e.target.value as SaleStatus)}
                     style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                   >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="abonado">Abonado</option>
                     <option value="completado">Completado</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
-                  {editStatus === 'abonado' && (
-                    <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>MONTO PAGADO</label>
-                      <input
-                        type="number"
-                        value={editMontoPagado}
-                        onChange={e => setEditMontoPagado(e.target.value)}
-                        placeholder={`Monto máximo: $${Number(selectedOrder.monto || 0).toFixed(2)}`}
-                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
-                      />
-                    </div>
-                  )}
                   {editStatus === 'completado' && (
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>ENVÍO POR</label>
@@ -468,10 +439,10 @@ export default function VentasPage() {
                 </div>
               ) : (
                 <span className="badge" style={{ 
-                  backgroundColor: selectedOrder.estado === 'completado' ? 'rgba(34,197,94,0.15)' : selectedOrder.estado === 'abonado' ? 'rgba(6,182,212,0.15)' : selectedOrder.estado === 'pendiente' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                  color: selectedOrder.estado === 'completado' ? '#4ade80' : selectedOrder.estado === 'abonado' ? '#06b6d4' : selectedOrder.estado === 'pendiente' ? '#fbbf24' : '#f87171'
+                  backgroundColor: selectedSale.estado === 'completado' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                  color: selectedSale.estado === 'completado' ? '#4ade80' : '#f87171'
                 }}>
-                  {selectedOrder.estado}
+                  {selectedSale.estado}
                 </span>
               )}
             </div>
@@ -479,8 +450,8 @@ export default function VentasPage() {
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Productos</p>
               <div style={{ background: 'var(--background)', borderRadius: 8, padding: 12 }}>
-                {selectedOrder.items?.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: idx < (selectedOrder.items?.length || 0) - 1 ? '1px solid var(--border)' : 'none' }}>
+                {selectedSale.items?.map((item, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: idx < (selectedSale.items?.length || 0) - 1 ? '1px solid var(--border)' : 'none' }}>
                     <span style={{ color: 'var(--text)' }}>{item.productName} x{item.quantity}</span>
                     <span style={{ color: 'var(--text-muted)' }}>${Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}</span>
                   </div>
@@ -491,34 +462,34 @@ export default function VentasPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Total</p>
-                <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)', margin: 0 }}>${Number(selectedOrder.monto || 0).toFixed(2)}</p>
+                <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)', margin: 0 }}>${Number(selectedSale.monto || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Pagado</p>
-                <p style={{ fontSize: 18, fontWeight: 600, color: '#4ade80', margin: 0 }}>${Number(selectedOrder.monto_pagado || 0).toFixed(2)}</p>
+                <p style={{ fontSize: 18, fontWeight: 600, color: '#4ade80', margin: 0 }}>${Number(selectedSale.monto_pagado || 0).toFixed(2)}</p>
               </div>
             </div>
 
-            {selectedOrder.metodo_pago && (
+            {selectedSale.metodo_pago && (
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Método de Pago</p>
-                <p style={{ fontSize: 14, color: 'var(--text)', margin: 0, textTransform: 'capitalize' }}>{selectedOrder.metodo_pago}</p>
-                {selectedOrder.metodo_pago === 'tarjeta' && selectedOrder.tarjeta_last4 && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Tarjeta: **** {selectedOrder.tarjeta_last4}</p>
+                <p style={{ fontSize: 14, color: 'var(--text)', margin: 0, textTransform: 'capitalize' }}>{selectedSale.metodo_pago}</p>
+                {selectedSale.metodo_pago === 'tarjeta' && selectedSale.tarjeta_last4 && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Tarjeta: **** {selectedSale.tarjeta_last4}</p>
                 )}
-                {selectedOrder.metodo_pago === 'tarjeta' && selectedOrder.tarjeta_autori && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Autorización: {selectedOrder.tarjeta_autori}</p>
+                {selectedSale.metodo_pago === 'tarjeta' && selectedSale.tarjeta_autori && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Autorización: {selectedSale.tarjeta_autori}</p>
                 )}
-                {selectedOrder.metodo_pago === 'transferencia' && selectedOrder.transferencia_imagen && (
+                {selectedSale.metodo_pago === 'transferencia' && selectedSale.transferencia_imagen && (
                   <div style={{ marginTop: 8 }}>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Comprobante:</p>
-                    <img src={selectedOrder.transferencia_imagen} alt="Comprobante" style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 8 }} />
+                    <img src={selectedSale.transferencia_imagen} alt="Comprobante" style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 8 }} />
                   </div>
                 )}
               </div>
             )}
 
-            {selectedOrder.factura_generada && (
+            {selectedSale.factura_generada && (
               <div style={{ marginBottom: 16, padding: 12, background: 'rgba(34,197,94,0.15)', borderRadius: 8 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#4ade80', margin: 0 }}>✓ Factura Generada</p>
               </div>
@@ -526,12 +497,12 @@ export default function VentasPage() {
 
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 4px' }}>Fecha</p>
-              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0 }}>{selectedOrder.fecha}</p>
+              <p style={{ fontSize: 14, color: 'var(--text)', margin: 0 }}>{selectedSale.fecha}</p>
             </div>
 
-            {!editMode && selectedOrder.notas && (
+            {!editMode && selectedSale.notas && (
               <div style={{ marginBottom: 16, padding: 12, background: 'var(--background)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                <span style={{ fontWeight: 500, color: 'var(--text)' }}>Envío:</span> {selectedOrder.notas}
+                <span style={{ fontWeight: 500, color: 'var(--text)' }}>Envío:</span> {selectedSale.notas}
               </div>
             )}
 
@@ -550,15 +521,15 @@ export default function VentasPage() {
               ) : (
                 <>
                   <button 
-                    onClick={() => { setEditMode(true); setEditStatus(selectedOrder.estado); setEditMontoPagado(String(selectedOrder.monto_pagado || '')); setEditNotas(selectedOrder.notas || ''); }}
+                    onClick={() => { setEditMode(true); setEditStatus(selectedSale.estado); setEditMontoPagado(String(selectedSale.monto_pagado || '')); setEditNotas(selectedSale.notas || ''); }}
                     style={{ flex: 1, padding: 12, background: isEjecutivo ? '#000000' : 'var(--primary)', border: 'none', borderRadius: 8, color: isEjecutivo ? '#ffffff' : '#000', fontWeight: 600, cursor: 'pointer' }}
                   >Editar Estado</button>
                   <button 
-                    onClick={() => handlePrint(selectedOrder)}
+                    onClick={() => handlePrint(selectedSale)}
                     style={{ padding: 12, background: isEjecutivo ? '#000000' : '#4ade80', border: 'none', borderRadius: 8, color: isEjecutivo ? '#ffffff' : '#000', fontWeight: 600, cursor: 'pointer' }}
                   >🖨️</button>
                   <button 
-                    onClick={() => handleDelete(selectedOrder.id)}
+                    onClick={() => handleDelete(selectedSale.id)}
                     style={{ padding: 12, background: isEjecutivo ? '#000000' : '#ef4444', border: 'none', borderRadius: 8, color: isEjecutivo ? '#ffffff' : '#fff', fontWeight: 600, cursor: 'pointer' }}
                   >Eliminar</button>
                 </>

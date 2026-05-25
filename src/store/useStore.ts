@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Product, Category, StoreSettings, ThemeType, SocialNetwork, EstadoCatalogo, TipoCatalogo, Order, ShippingField, StockMovement, Cliente, Reserva, ConsultaProducto, Color, Talla, Modelo, Catalogo } from '../types';
+import { Product, Category, StoreSettings, ThemeType, SocialNetwork, EstadoCatalogo, TipoCatalogo, DirectSale, ShippingField, StockMovement, Cliente, Reserva, ConsultaProducto, Color, Talla, Modelo, Catalogo } from '../types';
 import { mockProducts, mockCategories, mockReservas, mockConsultas } from '../services/mockData';
 import supabase from '../services/supabaseClient';
 
@@ -58,18 +58,12 @@ const defaultSettings: StoreSettings = {
   visitas: 0,
 };
 
-const defaultOrders: Order[] = [
-  { id: 'PED-001', cliente: 'María López', email: 'maria@email.com', telefono: '3001234567', direccion: 'Calle 123 #45-67', ciudad: 'Bogotá', items: [{ productId: '1', productName: 'Leggin Aurora', quantity: 2, price: 15 }], monto: 30, estado: 'completado', fecha: '2024-01-20' },
-  { id: 'PED-002', cliente: 'Carlos Ruiz', email: 'carlos@email.com', telefono: '3209876543', direccion: 'Carrera 78 #12-34', ciudad: 'Medellín', items: [{ productId: '2', productName: 'Leggin Sport', quantity: 1, price: 20 }], monto: 20, estado: 'enviado', fecha: '2024-01-21' },
-  { id: 'PED-003', cliente: 'Ana Torres', email: 'ana@email.com', telefono: '3154567890', direccion: 'Avenida 56 #78-90', ciudad: 'Cali', items: [{ productId: '3', productName: 'Leggin Basic', quantity: 3, price: 12 }], monto: 36, estado: 'pendiente', fecha: '2024-01-22' },
-  { id: 'PED-004', cliente: 'Pedro Díaz', email: 'pedro@email.com', telefono: '3005678901', direccion: 'Calle 90 #11-22', ciudad: 'Barranquilla', items: [{ productId: '1', productName: 'Leggin Aurora', quantity: 1, price: 15 }, { productId: '2', productName: 'Leggin Sport', quantity: 1, price: 20 }], monto: 35, estado: 'cancelado', fecha: '2024-01-19' },
-];
+const defaultDirectSales: DirectSale[] = [];
 
 interface AppState {
   products: Product[];
   categories: Category[];
-  orders: Order[];
-  reservasPos: Order[];
+  directSales: DirectSale[];
   clientes: Cliente[];
   reservas: Reserva[];
   consultas: ConsultaProducto[];
@@ -81,13 +75,12 @@ interface AppState {
   catalogos: Catalogo[];
   selectedProduct: Product | null;
   selectedCategory: Category | null;
-  selectedOrder: Order | null;
   selectedReserva: Reserva | null;
   isProductModalOpen: boolean;
   isCategoryModalOpen: boolean;
   isDeleteModalOpen: boolean;
   deleteItemId: string | null;
-  deleteItemType: 'product' | 'category' | 'order' | null;
+  deleteItemType: 'product' | 'category' | null;
   searchQuery: string;
   categoryFilter: string;
   productsPage: number;
@@ -117,13 +110,11 @@ interface AppState {
   actualizarCicloProducto: (id: string) => void;
   actualizarTodosLosCiclos: () => void;
   
-  // Gestión de pedidos
-  addOrder: (order: Order) => void;
-  updateOrder: (id: string, order: Partial<Order>) => void;
-  deleteOrder: (id: string) => void;
-  setSelectedOrder: (order: Order | null) => void;
-  fetchOrdersFromSupabase: () => Promise<void>;
-  fetchReservasPOSFromSupabase: () => Promise<void>;
+  // Gestión de ventas directas
+  addDirectSale: (sale: DirectSale) => void;
+  updateDirectSale: (id: string, sale: Partial<DirectSale>) => void;
+  deleteDirectSale: (id: string) => void;
+  fetchDirectSalesFromSupabase: () => Promise<void>;
   
   // Gestión de clientes
   addCliente: (cliente: Cliente) => Promise<void>;
@@ -207,7 +198,7 @@ interface AppState {
   closeProductModal: () => void;
   openCategoryModal: (category?: Category) => void;
   closeCategoryModal: () => void;
-  openDeleteModal: (id: string, type: 'product' | 'category' | 'order') => void;
+  openDeleteModal: (id: string, type: 'product' | 'category') => void;
   closeDeleteModal: () => void;
   confirmDelete: () => void;
   
@@ -223,8 +214,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       products: [],
       categories: [],
-      orders: defaultOrders,
-      reservasPos: [],
+      directSales: defaultDirectSales,
       clientes: defaultClientes,
       reservas: mockReservas,
       consultas: mockConsultas,
@@ -255,7 +245,6 @@ export const useStore = create<AppState>()(
   catalogos: [],
   selectedProduct: null,
   selectedCategory: null,
-  selectedOrder: null,
   selectedReserva: null,
   isProductModalOpen: false,
   isCategoryModalOpen: false,
@@ -947,250 +936,120 @@ export const useStore = create<AppState>()(
     }
   })),
   
-  // Gestión de pedidos
-  addOrder: async (order) => {
-    const esDirecta = order.estado === 'completado'
-    // Guardar localmente primero
+  // ========== GESTIÓN DE VENTAS DIRECTAS ==========
+  addDirectSale: async (sale) => {
+    console.log("Guardando venta en direct_sales");
     set((state) => ({
-      orders: esDirecta ? [...state.orders, order] : state.orders,
-      reservasPos: esDirecta ? state.reservasPos : [...state.reservasPos, order],
+      directSales: [...state.directSales, sale],
     }));
     
-    const orderData = {
-      codigo: order.id,
-      cliente: order.cliente,
-      cliente_id: order.clienteId || null,
-      email: order.email || '',
-      telefono: order.telefono || '',
-      direccion: order.direccion || '',
-      ciudad: order.ciudad || '',
-      items: order.items.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        productCode: item.productCode || '',
-        quantity: item.quantity,
-        price: item.price
-      })),
-      monto: order.monto,
-      estado: order.estado,
-      tipo_venta: order.estado === 'pendiente' ? 'reservado' : (order.estado === 'abonado' ? 'abonado' : 'directo'),
-      metodo_pago: order.metodo_pago || 'efectivo',
-      monto_pagado: order.monto_pagado || 0,
-      cambio: order.cambio || 0,
-      transferencia_imagen: order.transferencia_imagen || null,
-      tarjeta_last4: order.tarjeta_last4 || null,
-      tarjeta_autori: order.tarjeta_autori || null,
-      factura_generada: order.factura_generada || false,
-      notas: order.notas || '',
-      fecha: order.fecha,
-      user_id: null,
-      usuario_nombre: ''
-    };
-    
-    const { getSupabase } = await import('../services/supabaseClient')
-    const sb = getSupabase()
+    const sb = (await import('../services/supabaseClient')).getSupabase();
     if (!sb) {
-      console.warn('Supabase no disponible — venta guardada solo localmente')
-      return
+      console.warn('Supabase no disponible — venta guardada solo localmente');
+      return;
     }
 
+    let user_id = null;
+    let usuario_nombre = '';
     try {
-      const { data: { user } } = await sb.auth.getUser()
+      const { data: { user } } = await sb.auth.getUser();
       if (user) {
-        orderData.user_id = user.id
-        orderData.usuario_nombre = user.user_metadata?.nombre || user.email || ''
+        user_id = user.id;
+        usuario_nombre = user.user_metadata?.nombre || user.email || '';
       }
-    } catch {
-      // Usuario no autenticado—se guarda sin user_id
-    }
+    } catch {}
 
     try {
-      const intentarGuardar = async (tabla: string): Promise<boolean> => {
-        const { data, error } = await sb.from(tabla).insert(orderData).select().single();
-        if (error) {
-          console.error(`Error guardando en ${tabla}:`, error);
-          return false;
-        }
-        if (data) console.log(`Guardado en ${tabla}:`, data);
-        return true;
-      };
-
-      if (esDirecta) {
-        const ok = await intentarGuardar('ventas_directas');
-        if (!ok) {
-          console.warn('Fallback: guardando venta directa en pedidos');
-          await intentarGuardar('pedidos');
-        }
+      const { data, error } = await sb.from('direct_sales').insert({
+        codigo: sale.id,
+        cliente: sale.cliente,
+        cliente_id: sale.clienteId || null,
+        email: sale.email || '',
+        telefono: sale.telefono || '',
+        direccion: sale.direccion || '',
+        ciudad: sale.ciudad || '',
+        items: sale.items,
+        monto: sale.monto,
+        estado: sale.estado,
+        metodo_pago: sale.metodo_pago || 'efectivo',
+        monto_pagado: sale.monto_pagado || 0,
+        cambio: sale.cambio || 0,
+        transferencia_imagen: sale.transferencia_imagen || null,
+        tarjeta_last4: sale.tarjeta_last4 || null,
+        tarjeta_autori: sale.tarjeta_autori || null,
+        factura_generada: sale.factura_generada || false,
+        notas: sale.notas || '',
+        fecha: sale.fecha,
+        user_id,
+        usuario_nombre,
+      }).select().single();
+      if (error) {
+        console.error('Error guardando en direct_sales:', error);
       } else {
-        await intentarGuardar('pedidos');
+        console.log('Venta guardada en direct_sales:', data);
       }
     } catch (err) {
-      console.error('Exception guardando pedido:', err);
+      console.error('Exception guardando venta directa:', err);
     }
   },
-  
-  updateOrder: async (id, orderUpdate) => {
+
+  updateDirectSale: async (id, saleUpdate) => {
     set((state) => ({
-      orders: state.orders.map((o) => 
-        o.id === id ? { ...o, ...orderUpdate } : o
+      directSales: state.directSales.map((s) =>
+        s.id === id ? { ...s, ...saleUpdate } : s
       ),
-      reservasPos: state.reservasPos.map((o) => 
-        o.id === id ? { ...o, ...orderUpdate } : o
-      )
     }));
-    
-    const { getSupabase } = await import('../services/supabaseClient')
-    const sb = getSupabase()
-    if (!sb) return
+
+    const sb = (await import('../services/supabaseClient')).getSupabase();
+    if (!sb) return;
 
     try {
       const updateData: any = {};
-      if (orderUpdate.estado !== undefined) updateData.estado = orderUpdate.estado;
-      if (orderUpdate.monto_pagado !== undefined) updateData.monto_pagado = orderUpdate.monto_pagado;
-      if (orderUpdate.notas !== undefined) updateData.notas = orderUpdate.notas;
-      if (orderUpdate.items !== undefined) updateData.items = orderUpdate.items;
-      if (orderUpdate.monto !== undefined) updateData.monto = orderUpdate.monto;
-      
-      const { error } = await sb.from('ventas_directas').update(updateData).eq('codigo', id);
-      if (error) {
-        const { error: err2 } = await sb.from('pedidos').update(updateData).eq('codigo', id);
-        if (err2) console.error('Error actualizando pedido:', err2);
-      }
+      if (saleUpdate.estado !== undefined) updateData.estado = saleUpdate.estado;
+      if (saleUpdate.monto_pagado !== undefined) updateData.monto_pagado = saleUpdate.monto_pagado;
+      if (saleUpdate.notas !== undefined) updateData.notas = saleUpdate.notas;
+      if (saleUpdate.items !== undefined) updateData.items = saleUpdate.items;
+      if (saleUpdate.monto !== undefined) updateData.monto = saleUpdate.monto;
+      const { error } = await sb.from('direct_sales').update(updateData).eq('codigo', id);
+      if (error) console.error('Error actualizando direct_sales:', error);
     } catch (err) {
-      console.error('Exception actualizando pedido:', err);
+      console.error('Exception actualizando venta:', err);
     }
   },
-  
-  deleteOrder: async (id) => {
-    // Eliminar localmente
+
+  deleteDirectSale: async (id) => {
     set((state) => ({
-      orders: state.orders.filter((o) => o.id !== id),
-      reservasPos: state.reservasPos.filter((o) => o.id !== id),
+      directSales: state.directSales.filter((s) => s.id !== id),
     }));
-    
-    const { getSupabase } = await import('../services/supabaseClient')
-    const sb = getSupabase()
-    if (!sb) return
+
+    const sb = (await import('../services/supabaseClient')).getSupabase();
+    if (!sb) return;
 
     try {
-      const { error } = await sb.from('ventas_directas').delete().eq('codigo', id);
-      if (error) {
-        const { error: err2 } = await sb.from('pedidos').delete().eq('codigo', id);
-        if (err2) console.error('Error eliminando:', err2);
-      }
+      const { error } = await sb.from('direct_sales').delete().eq('codigo', id);
+      if (error) console.error('Error eliminando de direct_sales:', error);
     } catch (err) {
-      console.error('Exception eliminando pedido:', err);
-    }
-  },
-  
-  setSelectedOrder: (order) => set({ selectedOrder: order }),
-  
-  // Cargar ventas directas desde Supabase
-  fetchOrdersFromSupabase: async () => {
-    const { getSupabase } = await import('../services/supabaseClient')
-    const sb = getSupabase()
-    if (!sb) return
-    
-    const { data, error } = await sb
-      .from('ventas_directas')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
-    if (error) {
-      // Si la tabla no existe, fallback a pedidos filtrando directas
-      if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('Tabla ventas_directas no existe, usando pedidos como fallback')
-        const { data: fallbackData, error: fbError } = await sb
-          .from('pedidos')
-          .select('*')
-          .eq('tipo_venta', 'directo')
-          .order('created_at', { ascending: false })
-        if (fbError) {
-          console.error('Error fetching pedidos:', fbError)
-          return
-        }
-        if (fallbackData) {
-          const mappedOrders: Order[] = fallbackData.map((p: any) => ({
-            id: p.codigo,
-            cliente: p.cliente,
-            clienteId: p.cliente_id,
-            email: p.email || '',
-            telefono: p.telefono || '',
-            direccion: p.direccion || '',
-            ciudad: p.ciudad || '',
-            items: p.items || [],
-            monto: p.monto,
-            estado: p.estado,
-            fecha: p.fecha,
-            metodo_pago: p.metodo_pago,
-            monto_pagado: p.monto_pagado,
-            cambio: p.cambio,
-            transferencia_imagen: p.transferencia_imagen,
-            tarjeta_last4: p.tarjeta_last4,
-            tarjeta_autori: p.tarjeta_autori,
-            factura_generada: p.factura_generada,
-            notas: p.notas
-          }))
-          set((state) => {
-            const localIds = new Set(state.orders.map(o => o.id));
-            const newFromSupabase = mappedOrders.filter(o => !localIds.has(o.id));
-            return { orders: [...state.orders, ...newFromSupabase] };
-          })
-        }
-      } else {
-        console.error('Error fetching ventas directas:', error)
-      }
-      return
-    }
-    
-    if (data && data.length > 0) {
-      const mappedOrders: Order[] = data.map((p: any) => ({
-        id: p.codigo,
-        cliente: p.cliente,
-        clienteId: p.cliente_id,
-        email: p.email || '',
-        telefono: p.telefono || '',
-        direccion: p.direccion || '',
-        ciudad: p.ciudad || '',
-        items: p.items || [],
-        monto: p.monto,
-        estado: p.estado,
-        fecha: p.fecha,
-        metodo_pago: p.metodo_pago,
-        monto_pagado: p.monto_pagado,
-        cambio: p.cambio,
-        transferencia_imagen: p.transferencia_imagen,
-        tarjeta_last4: p.tarjeta_last4,
-        tarjeta_autori: p.tarjeta_autori,
-        factura_generada: p.factura_generada,
-        notas: p.notas
-      }))
-      
-      set((state) => {
-        const localIds = new Set(state.orders.map(o => o.id));
-        const newFromSupabase = mappedOrders.filter(o => !localIds.has(o.id));
-        return { orders: [...state.orders, ...newFromSupabase] };
-      })
+      console.error('Exception eliminando venta:', err);
     }
   },
 
-  // Cargar reservas POS desde Supabase
-  fetchReservasPOSFromSupabase: async () => {
-    if (!supabase) return
-    
-    const { data, error } = await supabase
-      .from('pedidos')
+  fetchDirectSalesFromSupabase: async () => {
+    const sb = (await import('../services/supabaseClient')).getSupabase();
+    if (!sb) return;
+
+    console.log("Consultando ventas desde direct_sales");
+    const { data, error } = await sb
+      .from('direct_sales')
       .select('*')
-      .or('tipo_venta.is.null,tipo_venta.neq.directo')
-      .order('created_at', { ascending: false })
-    
+      .order('created_at', { ascending: false });
+
     if (error) {
-      console.error('Error fetching reservas POS:', error)
-      return
+      console.error('Error fetching direct_sales:', error);
+      return;
     }
-    
+
     if (data && data.length > 0) {
-      const mappedReservas: Order[] = data.map((p: any) => ({
+      const mapped: DirectSale[] = data.map((p: any) => ({
         id: p.codigo,
         cliente: p.cliente,
         clienteId: p.cliente_id,
@@ -1209,17 +1068,16 @@ export const useStore = create<AppState>()(
         tarjeta_last4: p.tarjeta_last4,
         tarjeta_autori: p.tarjeta_autori,
         factura_generada: p.factura_generada,
-        notas: p.notas
-      }))
-      
+        notas: p.notas,
+      }));
       set((state) => {
-        const localIds = new Set(state.reservasPos.map(o => o.id));
-        const newFromSupabase = mappedReservas.filter(o => !localIds.has(o.id));
-        return { reservasPos: [...state.reservasPos, ...newFromSupabase] };
-      })
+        const existingIds = new Set(state.directSales.map(s => s.id));
+        const newItems = mapped.filter(s => !existingIds.has(s.id));
+        return { directSales: [...state.directSales, ...newItems] };
+      });
     }
   },
-  
+
   // Gestión de clientes
   addCliente: async (cliente) => {
     set((state) => ({ 
@@ -1533,8 +1391,7 @@ export const useStore = create<AppState>()(
         settings: state.settings,
         reservas: state.reservas,
         consultas: state.consultas,
-        orders: state.orders,
-        reservasPos: state.reservasPos,
+        directSales: state.directSales,
         clientes: state.clientes,
       }),
       onRehydrateStorage: () => (state) => {

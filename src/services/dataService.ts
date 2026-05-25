@@ -1,4 +1,4 @@
-import { Product, Category, Order, Cliente, Reserva, ConsultaProducto, StockMovement } from '../types';
+import { Product, Category, DirectSale, Cliente, Reserva, ConsultaProducto, StockMovement } from '../types';
 import supabase from './supabaseClient';
 
 const isSupabaseConfigured = (): boolean => {
@@ -41,14 +41,14 @@ export const dataService = {
     })) as Category[];
   },
 
-  async getOrders(): Promise<Order[]> {
+  // ========== DIRECT SALES ==========
+
+  async getDirectSales(): Promise<DirectSale[]> {
     if (!checkConfigured()) return [];
-    const { data: ventas, error: err1 } = await supabase.from('ventas_directas').select('*').order('created_at', { ascending: false });
-    if (err1) throw err1;
-    const { data: pedidos, error: err2 } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
-    if (err2) throw err2;
-    const all = [...(ventas || []), ...(pedidos || [])];
-    const mapped = all.map((p: any) => ({
+    console.log("Consultando ventas en direct_sales");
+    const { data, error } = await supabase.from('direct_sales').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((p: any) => ({
       id: p.codigo,
       cliente: p.cliente,
       clienteId: p.cliente_id,
@@ -68,40 +68,58 @@ export const dataService = {
       tarjeta_last4: p.tarjeta_last4,
       tarjeta_autori: p.tarjeta_autori,
       factura_generada: p.factura_generada,
-    }));
-    return mapped as Order[];
+    })) as DirectSale[];
   },
 
-  async createOrder(order: Order): Promise<Order> {
+  async createDirectSale(sale: DirectSale): Promise<DirectSale> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
-    const isCompletada = order.estado === 'completado';
-    const table = isCompletada ? 'ventas_directas' : 'pedidos';
-    const { data, error } = await supabase.from(table).insert({
-      codigo: order.id,
-      cliente: order.cliente,
-      cliente_id: order.clienteId || null,
-      email: order.email || '',
-      telefono: order.telefono || '',
-      direccion: order.direccion || '',
-      ciudad: order.ciudad || '',
-      items: order.items,
-      monto: order.monto,
-      estado: order.estado,
-      metodo_pago: order.metodo_pago || 'efectivo',
-      monto_pagado: order.monto_pagado || 0,
-      cambio: order.cambio || 0,
-      transferencia_imagen: order.transferencia_imagen || null,
-      tarjeta_last4: order.tarjeta_last4 || null,
-      tarjeta_autori: order.tarjeta_autori || null,
-      factura_generada: order.factura_generada || false,
-      notas: order.notas || '',
-      fecha: order.fecha,
+    console.log("Guardando venta en direct_sales");
+    const { data, error } = await supabase.from('direct_sales').insert({
+      codigo: sale.id,
+      cliente: sale.cliente,
+      cliente_id: sale.clienteId || null,
+      email: sale.email || '',
+      telefono: sale.telefono || '',
+      direccion: sale.direccion || '',
+      ciudad: sale.ciudad || '',
+      items: sale.items,
+      monto: sale.monto,
+      estado: sale.estado,
+      metodo_pago: sale.metodo_pago || 'efectivo',
+      monto_pagado: sale.monto_pagado || 0,
+      cambio: sale.cambio || 0,
+      transferencia_imagen: sale.transferencia_imagen || null,
+      tarjeta_last4: sale.tarjeta_last4 || null,
+      tarjeta_autori: sale.tarjeta_autori || null,
+      factura_generada: sale.factura_generada || false,
+      notas: sale.notas || '',
+      fecha: sale.fecha,
     }).select().single();
     if (error) throw error;
-    return data as Order;
+    return {
+      id: data.codigo,
+      cliente: data.cliente,
+      clienteId: data.cliente_id,
+      email: data.email || '',
+      telefono: data.telefono || '',
+      direccion: data.direccion || '',
+      ciudad: data.ciudad || '',
+      items: data.items || [],
+      monto: data.monto,
+      estado: data.estado,
+      fecha: data.fecha,
+      notas: data.notas,
+      metodo_pago: data.metodo_pago,
+      monto_pagado: data.monto_pagado,
+      cambio: data.cambio,
+      transferencia_imagen: data.transferencia_imagen,
+      tarjeta_last4: data.tarjeta_last4,
+      tarjeta_autori: data.tarjeta_autori,
+      factura_generada: data.factura_generada,
+    } as DirectSale;
   },
 
-  async updateOrder(id: string, updates: Partial<Order>): Promise<void> {
+  async updateDirectSale(id: string, updates: Partial<DirectSale>): Promise<void> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
     const updateData: any = {};
     if (updates.estado !== undefined) updateData.estado = updates.estado;
@@ -109,12 +127,17 @@ export const dataService = {
     if (updates.notas !== undefined) updateData.notas = updates.notas;
     if (updates.items !== undefined) updateData.items = updates.items;
     if (updates.monto !== undefined) updateData.monto = updates.monto;
-    const { error: err1 } = await supabase.from('ventas_directas').update(updateData).eq('codigo', id);
-    if (err1) {
-      const { error: err2 } = await supabase.from('pedidos').update(updateData).eq('codigo', id);
-      if (err2) throw err2;
-    }
+    const { error } = await supabase.from('direct_sales').update(updateData).eq('codigo', id);
+    if (error) throw error;
   },
+
+  async deleteDirectSale(id: string): Promise<void> {
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
+    const { error } = await supabase.from('direct_sales').delete().eq('codigo', id);
+    if (error) throw error;
+  },
+
+  // ========== CLIENTS ==========
 
   async getClientes(): Promise<Cliente[]> {
     if (!checkConfigured()) return [];
@@ -163,12 +186,16 @@ export const dataService = {
     } as Cliente;
   },
 
-  async getReservas(): Promise<Reserva[]> {
+  // ========== RESERVATIONS ==========
+
+  async getReservas(origen?: 'store' | 'pos'): Promise<Reserva[]> {
     if (!checkConfigured()) return [];
-    const { data, error } = await supabase.from('reservations').select('*').order('fecha_reserva', { ascending: false });
+    console.log("Consultando reservas en reservations, origen:", origen || 'todas');
+    let query = supabase.from('reservations').select('*').order('fecha_reserva', { ascending: false });
+    if (origen) query = query.eq('origen', origen);
+    const { data, error } = await query;
     if (error) throw error;
-    
-    const mappedData: Reserva[] = (data || []).map((r: any) => ({
+    return (data || []).map((r: any) => ({
       id: r.id,
       codigo: r.codigo,
       cliente_id: r.client_phone || r.client_document || r.id,
@@ -190,17 +217,14 @@ export const dataService = {
       whatsapp_revisado: r.whatsapp_revisado,
       comprobante_verificado: r.comprobante_verificado,
       abono_confirmado: r.abono_confirmado,
-      origen: r.origen || 'tienda',
+      origen: r.origen || 'store',
       abonos: r.abonos || [],
-    }));
-    
-    return mappedData;
+    })) as Reserva[];
   },
 
   async createReserva(reserva: Partial<Reserva>): Promise<Reserva> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
-    console.log('Insertando reserva:', reserva)
-    
+    console.log("Guardando reserva en reservations, origen:", reserva.origen);
     const reservaData: any = {
       codigo: reserva.codigo,
       client_id: reserva.cliente_id || null,
@@ -222,11 +246,10 @@ export const dataService = {
       whatsapp_revisado: reserva.whatsapp_revisado,
       comprobante_verificado: reserva.comprobante_verificado,
       abono_confirmado: reserva.abono_confirmado,
-      origen: reserva.origen || 'tienda',
+      origen: reserva.origen || 'store',
       abonos: reserva.abonos || [],
     };
 
-    // Remover client_id si no es un UUID válido
     if (reservaData.client_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservaData.client_id)) {
       delete reservaData.client_id
     }
@@ -236,9 +259,7 @@ export const dataService = {
       console.error('Error insertando reserva:', error)
       throw error
     }
-    console.log('Reserva insertada:', data)
-    
-    // 2. Insertar items en reservation_items
+
     if (reserva.items && reserva.items.length > 0) {
       const itemsData = reserva.items.map((item: any) => ({
         reserva_id: data.id,
@@ -247,20 +268,11 @@ export const dataService = {
         cantidad: item.cantidad || item.qty || 1,
         precio_unitario: item.precio_unitario || item.price || 0,
       }))
-
-      const { error: itemsError } = await supabase
-        .from('reservation_items')
-        .insert(itemsData)
-
-      if (itemsError) {
-        console.warn('Error insertando items:', itemsError)
-      } else {
-        console.log('Items insertados:', itemsData.length)
-      }
+      const { error: itemsError } = await supabase.from('reservation_items').insert(itemsData)
+      if (itemsError) console.warn('Error insertando items:', itemsError)
     }
-    
-    // Mapear respuesta de DB a tipo Reserva
-    const mapped: Reserva = {
+
+    return {
       id: data.id,
       codigo: data.codigo,
       cliente_id: data.client_id || reserva.cliente_id || '',
@@ -282,17 +294,14 @@ export const dataService = {
       whatsapp_revisado: data.whatsapp_revisado || false,
       comprobante_verificado: data.comprobante_verificado || false,
       abono_confirmado: data.abono_confirmado || false,
-      origen: data.origen || 'tienda',
+      origen: data.origen || 'store',
       abonos: data.abonos || [],
       items: reserva.items || [],
-    }
-    
-    return mapped;
+    } as Reserva;
   },
 
   async updateReserva(id: string, updates: Partial<Reserva>): Promise<void> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
-    
     const updateData: any = {};
     if (updates.estado_reserva !== undefined) updateData.status = updates.estado_reserva;
     if (updates.whatsapp_revisado !== undefined) updateData.whatsapp_revisado = updates.whatsapp_revisado;
@@ -301,17 +310,14 @@ export const dataService = {
     if (updates.abono !== undefined) updateData.abono = updates.abono;
     if (updates.saldo !== undefined) updateData.saldo = updates.saldo;
     if (updates.notas_admin !== undefined) updateData.notas_admin = updates.notas_admin;
-    
     const { error } = await supabase.from('reservations').update(updateData).eq('id', id);
     if (error) throw error;
   },
 
   async agregarAbonoReserva(reservaId: string, monto: number, comprobanteUrl?: string, notas?: string): Promise<void> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
-    
     const { data: reserva } = await supabase.from('reservations').select('*').eq('id', reservaId).single();
     if (!reserva) throw new Error('Reserva no encontrada');
-    
     const nuevoAbono = {
       id: `AB-${Date.now()}`,
       reserva_id: reservaId,
@@ -321,14 +327,11 @@ export const dataService = {
       notas: notas || null,
       tipo: monto >= reserva.total - reserva.abono ? 'final' : 'parcial',
     };
-    
     const abonosActuales = reserva.abonos || [];
     abonosActuales.push(nuevoAbono);
-    
     const nuevoTotalAbonado = reserva.abono + monto;
     const nuevoSaldo = reserva.total - nuevoTotalAbonado;
     const nuevoEstado = nuevoSaldo <= 0 ? 'confirmado' : reserva.status;
-    
     const { error } = await supabase.from('reservations').update({
       abono: nuevoTotalAbonado,
       saldo: Math.max(0, nuevoSaldo),
@@ -336,9 +339,10 @@ export const dataService = {
       status: nuevoEstado,
       comprobante_verificado: comprobanteUrl ? true : reserva.comprobante_verificado,
     }).eq('id', reservaId);
-    
     if (error) throw error;
   },
+
+  // ========== CONSULTAS ==========
 
   async getConsultas(): Promise<ConsultaProducto[]> {
     if (!checkConfigured()) return [];
@@ -353,6 +357,8 @@ export const dataService = {
     if (error) throw error;
     return data as ConsultaProducto;
   },
+
+  // ========== STOCK MOVEMENTS ==========
 
   async getStockMovements(productId?: string): Promise<StockMovement[]> {
     if (!checkConfigured()) return [];

@@ -38,9 +38,8 @@ export default function DashboardPage() {
   const themeColors = THEME_PRESETS[theme] ?? THEME_PRESETS.moderno;
 
   const products = useStore((state) => state.products);
-  const orders = useStore((state) => state.orders);
+  const directSales = useStore((state) => state.directSales);
   const reservas = useStore((state) => state.reservas);
-  const reservasPos = useStore((state) => state.reservasPos);
   const clientes = useStore((state) => state.clientes);
 
   const stats = useMemo(() => {
@@ -48,31 +47,27 @@ export default function DashboardPage() {
     const today = now.toISOString().split('T')[0];
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 
-    const completedOrders = orders.filter(o => o.estado === 'completado');
-    const pendingOrders = orders.filter(o => o.estado === 'pendiente');
-    const abonadoOrders = orders.filter(o => o.estado === 'abonado');
-    const canceledOrders = orders.filter(o => o.estado === 'cancelado');
+    const completedSales = directSales.filter(o => o.estado === 'completado');
+    const canceledSales = directSales.filter(o => o.estado === 'cancelado');
 
-    const ingresosTotales = completedOrders.reduce((s, o) => s + o.monto, 0);
-    const ingresosHoy = completedOrders.filter(o => o.fecha === today).reduce((s, o) => s + o.monto, 0);
+    const ingresosTotales = completedSales.reduce((s, o) => s + o.monto, 0);
+    const ingresosHoy = completedSales.filter(o => o.fecha === today).reduce((s, o) => s + o.monto, 0);
     const ingresosSemana = (() => {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      return completedOrders.filter(o => o.fecha >= weekAgo).reduce((s, o) => s + o.monto, 0);
+      return completedSales.filter(o => o.fecha >= weekAgo).reduce((s, o) => s + o.monto, 0);
     })();
-    const ingresosMes = completedOrders.filter(o => o.fecha >= monthStart).reduce((s, o) => s + o.monto, 0);
+    const ingresosMes = completedSales.filter(o => o.fecha >= monthStart).reduce((s, o) => s + o.monto, 0);
 
-    const todayOrders = orders.filter(o => o.fecha === today);
+    const todaySales = directSales.filter(o => o.fecha === today);
     const todayReservas = reservas.filter(r => r.fecha_reserva?.startsWith(today));
-    const todayReservasPos = reservasPos.filter(r => r.fecha === today);
 
     const nuevosClientesMes = clientes.filter(c => {
       const cDate = c.fecha_registro || '';
       return cDate >= monthStart;
     }).length;
 
-    const reservasPendientes = reservas.filter(r => r.estado_reserva === 'pendiente' || r.estado_reserva === 'abonado');
-    const reservasPosPendientes = reservasPos.filter(r => r.estado === 'pendiente' || r.estado === 'abonado');
-    const totalSaldoReservas = reservasPendientes.reduce((s, r) => s + (r.saldo || 0), 0) + reservasPosPendientes.reduce((s, r) => s + (r.monto - (r.monto_pagado || 0)), 0);
+    const reservasPendientes = reservas.filter(r => r.origen === 'pos' ? (r.estado_reserva === 'pendiente' || r.estado_reserva === 'abonado') : (r.estado_reserva === 'pendiente' || r.estado_reserva === 'abonado'));
+    const totalSaldoReservas = reservasPendientes.reduce((s, r) => s + (r.saldo || 0), 0);
 
     // Ventas por día (últimos 7 días)
     const ventasPorDia: Array<{ dia: string; fecha: string; ventas: number; ingresos: number; reservas: number }> = [];
@@ -80,7 +75,7 @@ export default function DashboardPage() {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const fecha = d.toISOString().split('T')[0];
       const dia = d.toLocaleDateString('es-ES', { weekday: 'short' });
-      const ventasDia = completedOrders.filter(o => o.fecha === fecha);
+      const ventasDia = completedSales.filter(o => o.fecha === fecha);
       const reservasDia = reservas.filter(r => r.fecha_reserva?.startsWith(fecha));
       ventasPorDia.push({
         dia: dia.charAt(0).toUpperCase() + dia.slice(1),
@@ -91,21 +86,18 @@ export default function DashboardPage() {
       });
     }
 
-    // Distribución de pedidos
-    const orderStatusDist = [
-      { name: 'Completados', value: completedOrders.length, color: COLORS.green },
-      { name: 'Abonados', value: abonadoOrders.length, color: COLORS.blue },
-      { name: 'Pendientes', value: pendingOrders.length, color: COLORS.yellow },
-      { name: 'Cancelados', value: canceledOrders.length, color: COLORS.red },
+    // Distribución de ventas directas
+    const saleStatusDist = [
+      { name: 'Completados', value: completedSales.length, color: COLORS.green },
+      { name: 'Cancelados', value: canceledSales.length, color: COLORS.red },
     ].filter(d => d.value > 0);
 
-    // Estado de reservas (store + pos)
+    // Estado de reservas
     const reservaStatusDist = [
-      { name: 'Pendientes', value: reservas.filter(r => r.estado_reserva === 'pendiente').length + reservasPos.filter(r => r.estado === 'pendiente').length, color: COLORS.yellow },
-      { name: 'Abonadas', value: reservas.filter(r => r.estado_reserva === 'abonado').length + reservasPos.filter(r => r.estado === 'abonado').length, color: COLORS.blue },
+      { name: 'Pendientes', value: reservas.filter(r => r.estado_reserva === 'pendiente').length, color: COLORS.yellow },
+      { name: 'Abonadas', value: reservas.filter(r => r.estado_reserva === 'abonado').length, color: COLORS.blue },
       { name: 'Confirmadas', value: reservas.filter(r => r.estado_reserva === 'confirmado').length, color: COLORS.green },
-      { name: 'Completadas', value: reservasPos.filter(r => r.estado === 'completado').length, color: COLORS.purple },
-      { name: 'Canceladas', value: reservas.filter(r => r.estado_reserva === 'cancelado').length + reservasPos.filter(r => r.estado === 'cancelado').length, color: COLORS.red },
+      { name: 'Canceladas', value: reservas.filter(r => r.estado_reserva === 'cancelado').length, color: COLORS.red },
     ].filter(d => d.value > 0);
 
     // Top productos más vendidos
@@ -121,7 +113,7 @@ export default function DashboardPage() {
         productSales[pid].total += (item[priceField] || 0) * (item[qtyField] || 0);
       });
     };
-    [...orders, ...reservasPos].forEach(o => processItems(o.items || [], 'productId', 'productName', 'quantity', 'price'));
+    directSales.forEach(o => processItems(o.items || [], 'productId', 'productName', 'quantity', 'price'));
     reservas.forEach(r => processItems(r.items || [], 'producto_id', 'producto_nombre', 'cantidad', 'precio_unitario'));
     const topProductos = Object.values(productSales)
       .sort((a, b) => b.cantidad - a.cantidad)
@@ -136,22 +128,19 @@ export default function DashboardPage() {
         sin_stock: products.filter(p => p.stock === 0).length,
         stock_total: products.reduce((sum, p) => sum + p.stock, 0),
       },
-      pedidos: {
-        total: orders.length,
-        completados: completedOrders.length,
-        pendientes: pendingOrders.length,
-        abonados: abonadoOrders.length,
-        cancelados: canceledOrders.length,
+      ventas_directas: {
+        total: directSales.length,
+        completados: completedSales.length,
+        cancelados: canceledSales.length,
         ingresos_totales: ingresosTotales,
         ingresos_hoy: ingresosHoy,
         ingresos_semana: ingresosSemana,
         ingresos_mes: ingresosMes,
       },
       reservas: {
-        total: reservas.length + reservasPos.length,
-        pendientes: reservas.filter(r => r.estado_reserva === 'pendiente').length + reservasPos.filter(r => r.estado === 'pendiente').length,
-        abonadas: reservas.filter(r => r.estado_reserva === 'abonado').length + reservasPos.filter(r => r.estado === 'abonado').length,
-        completadas: reservasPos.filter(r => r.estado === 'completado').length,
+        total: reservas.length,
+        pendientes: reservas.filter(r => r.estado_reserva === 'pendiente').length,
+        abonadas: reservas.filter(r => r.estado_reserva === 'abonado').length,
         confirmadas: reservas.filter(r => r.estado_reserva === 'confirmado').length,
         total_saldo: totalSaldoReservas,
       },
@@ -160,20 +149,19 @@ export default function DashboardPage() {
         nuevos_mes: nuevosClientesMes,
       },
       actividad_hoy: {
-        ventas: todayOrders.filter(o => o.estado === 'completado').length,
-        reservas_store: todayReservas.length,
-        reservas_pos: todayReservasPos.length,
+        ventas: todaySales.filter(o => o.estado === 'completado').length,
+        reservas: todayReservas.length,
         clientes_nuevos: clientes.filter(c => {
       const cDate = c.fecha_registro || '';
       return cDate.startsWith(today);
         }).length,
       },
       ventasPorDia,
-      orderStatusDist,
+      saleStatusDist,
       reservaStatusDist,
       topProductos,
     };
-  }, [orders, reservas, reservasPos, products, clientes]);
+  }, [directSales, reservas, products, clientes]);
 
   const formatCurrency = (value: number) => `$${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -204,10 +192,9 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Actividad de Hoy</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card title="Ventas" value={stats.actividad_hoy.ventas} icon="💵" color={bgCard} subtitle={`${formatCurrency(stats.pedidos.ingresos_hoy)}`} />
-          <Card title="Reservas Tienda" value={stats.actividad_hoy.reservas_store} icon="📋" color={bgCard} />
-          <Card title="Reservas POS" value={stats.actividad_hoy.reservas_pos} icon="📦" color={bgCard} />
-          <Card title="Clientes Nuevos" value={stats.actividad_hoy.clientes_nuevos} icon="👤" color={bgCard} />
+          <Card title="Ventas" value={stats.actividad_hoy.ventas} icon="💵" color={bgCard} subtitle={`${formatCurrency(stats.ventas_directas.ingresos_hoy)}`} />
+          <Card title="Reservas Hoy" value={stats.actividad_hoy.reservas} icon="📋" color={bgCard} />
+          <Card title="Clientes Nuevos" value={stats.clientes.nuevos_mes} icon="👤" color={bgCard} />
         </div>
       </div>
 
@@ -215,10 +202,10 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Ingresos</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card title="Hoy" value={formatCurrency(stats.pedidos.ingresos_hoy)} icon="💰" color="bg-green-50" />
-          <Card title="Esta Semana" value={formatCurrency(stats.pedidos.ingresos_semana)} icon="📈" color="bg-blue-50" />
-          <Card title="Este Mes" value={formatCurrency(stats.pedidos.ingresos_mes)} icon="📊" color="bg-purple-50" />
-          <Card title="Total" value={formatCurrency(stats.pedidos.ingresos_totales)} icon="🏆" color="bg-yellow-50" />
+          <Card title="Hoy" value={formatCurrency(stats.ventas_directas.ingresos_hoy)} icon="💰" color="bg-green-50" />
+          <Card title="Esta Semana" value={formatCurrency(stats.ventas_directas.ingresos_semana)} icon="📈" color="bg-blue-50" />
+          <Card title="Este Mes" value={formatCurrency(stats.ventas_directas.ingresos_mes)} icon="📊" color="bg-purple-50" />
+          <Card title="Total" value={formatCurrency(stats.ventas_directas.ingresos_totales)} icon="🏆" color="bg-yellow-50" />
         </div>
       </div>
 
@@ -246,13 +233,13 @@ export default function DashboardPage() {
         {/* Pie chart: Distribución de pedidos */}
         <div style={chartStyle}>
           <h3 className="text-lg font-semibold text-gray-700 mb-4">Estado de Pedidos</h3>
-          {stats.orderStatusDist.length === 0 ? (
+          {stats.saleStatusDist.length === 0 ? (
             <div className="flex items-center justify-center h-[280px] text-gray-400 text-sm">Sin datos de pedidos</div>
           ) : (
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
-                data={stats.orderStatusDist}
+                data={stats.saleStatusDist}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}
@@ -261,7 +248,7 @@ export default function DashboardPage() {
                 dataKey="value"
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
-                {stats.orderStatusDist.map((entry, idx) => (
+                {stats.saleStatusDist.map((entry, idx) => (
                   <Cell key={idx} fill={entry.color} />
                 ))}
               </Pie>
