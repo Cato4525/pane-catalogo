@@ -491,16 +491,6 @@ export interface ConsultaProducto {
 export type EstadoProducto = 'activo' | 'inactivo' | 'descontinuado';
 export type CatalogoTipo = 'nuevo' | 'tendencia' | 'clasico' | 'permanente' | 'liquidacion';
 
-export interface ReservaItem {
-  id: string;
-  reserva_id: string;
-  producto_id: string;
-  producto_nombre?: string;
-  cantidad: number;
-  precio_unitario: number;
-  subtotal: number;
-}
-
 export interface CarritoItem {
   producto: Product;
   cantidad: number;

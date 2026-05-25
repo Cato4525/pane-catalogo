@@ -4,6 +4,22 @@ import { Product, Category, StoreSettings, ThemeType, SocialNetwork, EstadoCatal
 import { mockProducts, mockCategories, mockReservas, mockConsultas } from '../services/mockData';
 import supabase from '../services/supabaseClient';
 
+const persistStockMovement = async (movement: StockMovement) => {
+  const { getSupabase } = await import('../services/supabaseClient');
+  const sb = getSupabase();
+  if (!sb) return;
+  await sb.from('stock_movements').insert({
+    product_id: movement.productId,
+    product_name: movement.productName,
+    tipo: movement.tipo,
+    cantidad: movement.cantidad,
+    stock_anterior: movement.stock_anterior,
+    stock_nuevo: movement.stock_nuevo,
+    motivo: movement.motivo,
+    referencia: movement.referencia,
+  });
+};
+
 const defaultClientes: Cliente[] = [
   { id: 'CLI-001', nombre: 'María López', email: 'maria@email.com', telefono: '3001234567', direccion: 'Calle 123 #45-67', ciudad: 'Bogotá', documento: '12345678', tipo_documento: 'cc', fecha_registro: '2024-01-15', observaciones: 'Cliente frecuente' },
   { id: 'CLI-002', nombre: 'Carlos Ruiz', email: 'carlos@email.com', telefono: '3209876543', direccion: 'Carrera 78 #12-34', ciudad: 'Medellín', documento: '98765432', tipo_documento: 'cc', fecha_registro: '2024-01-10', observaciones: '' },
@@ -1000,13 +1016,13 @@ export const useStore = create<AppState>()(
       };
 
       if (esDirecta) {
-        const ok = await intentarGuardar('ventas_directas');
+        const ok = await intentarGuardar('direct_sales');
         if (!ok) {
           console.warn('Fallback: guardando venta directa en pedidos');
-          await intentarGuardar('pedidos');
+          await intentarGuardar('pos_orders');
         }
       } else {
-        await intentarGuardar('pedidos');
+        await intentarGuardar('pos_orders');
       }
     } catch (err) {
       console.error('Exception guardando pedido:', err);
@@ -1035,9 +1051,9 @@ export const useStore = create<AppState>()(
       if (orderUpdate.items !== undefined) updateData.items = orderUpdate.items;
       if (orderUpdate.monto !== undefined) updateData.monto = orderUpdate.monto;
       
-      const { error } = await sb.from('ventas_directas').update(updateData).eq('codigo', id);
+      const { error } = await sb.from('direct_sales').update(updateData).eq('codigo', id);
       if (error) {
-        const { error: err2 } = await sb.from('pedidos').update(updateData).eq('codigo', id);
+        const { error: err2 } = await sb.from('pos_orders').update(updateData).eq('codigo', id);
         if (err2) console.error('Error actualizando pedido:', err2);
       }
     } catch (err) {
@@ -1057,9 +1073,9 @@ export const useStore = create<AppState>()(
     if (!sb) return
 
     try {
-      const { error } = await sb.from('ventas_directas').delete().eq('codigo', id);
+      const { error } = await sb.from('direct_sales').delete().eq('codigo', id);
       if (error) {
-        const { error: err2 } = await sb.from('pedidos').delete().eq('codigo', id);
+        const { error: err2 } = await sb.from('pos_orders').delete().eq('codigo', id);
         if (err2) console.error('Error eliminando:', err2);
       }
     } catch (err) {
@@ -1076,16 +1092,16 @@ export const useStore = create<AppState>()(
     if (!sb) return
     
     const { data, error } = await sb
-      .from('ventas_directas')
+      .from('direct_sales')
       .select('*')
       .order('created_at', { ascending: false })
     
     if (error) {
       // Si la tabla no existe, fallback a pedidos filtrando directas
       if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('Tabla ventas_directas no existe, usando pedidos como fallback')
+        console.warn('Tabla direct_sales no existe, usando pedidos como fallback')
         const { data: fallbackData, error: fbError } = await sb
-          .from('pedidos')
+          .from('pos_orders')
           .select('*')
           .eq('tipo_venta', 'directo')
           .order('created_at', { ascending: false })
@@ -1163,7 +1179,7 @@ export const useStore = create<AppState>()(
     if (!supabase) return
     
     const { data, error } = await supabase
-      .from('pedidos')
+      .from('pos_orders')
       .select('*')
       .or('tipo_venta.is.null,tipo_venta.neq.directo')
       .order('created_at', { ascending: false })
@@ -1372,9 +1388,10 @@ export const useStore = create<AppState>()(
     return state.movements;
   },
   
-  addStock: (productId, cantidad, motivo, referencia, tipo) => set((state) => {
+  addStock: (productId, cantidad, motivo, referencia, tipo) => {
+    const state = get();
     const product = state.products.find(p => p.id === productId);
-    if (!product) return state;
+    if (!product) return;
     
     const stock_anterior = product.stock;
     const stock_nuevo = stock_anterior + cantidad;
@@ -1392,17 +1409,20 @@ export const useStore = create<AppState>()(
       fecha: new Date().toISOString().split('T')[0]
     };
     
-    return {
+    set((state) => ({
       movements: [movement, ...state.movements],
       products: state.products.map(p => 
         p.id === productId ? { ...p, stock: stock_nuevo } : p
       )
-    };
-  }),
+    }));
+    
+    persistStockMovement(movement);
+  },
   
-  removeStock: (productId, cantidad, motivo, referencia) => set((state) => {
+  removeStock: (productId, cantidad, motivo, referencia) => {
+    const state = get();
     const product = state.products.find(p => p.id === productId);
-    if (!product || product.stock < cantidad) return state;
+    if (!product || product.stock < cantidad) return;
     
     const stock_anterior = product.stock;
     const stock_nuevo = stock_anterior - cantidad;
@@ -1420,13 +1440,15 @@ export const useStore = create<AppState>()(
       fecha: new Date().toISOString().split('T')[0]
     };
     
-    return {
+    set((state) => ({
       movements: [movement, ...state.movements],
       products: state.products.map(p => 
         p.id === productId ? { ...p, stock: stock_nuevo } : p
       )
-    };
-  }),
+    }));
+    
+    persistStockMovement(movement);
+  },
   
   // Gestión de campos de envío
   addShippingField: (field) => set((state) => ({

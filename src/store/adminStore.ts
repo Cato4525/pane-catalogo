@@ -160,7 +160,21 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
       if (error) throw error
 
-      const newClientes = reset ? (data || []) : [...clientes, ...(data || [])]
+      const mappedClientes = (data || []).map((c: any) => ({
+        id: c.id,
+        nombre: c.nombre,
+        email: c.email || '',
+        telefono: c.telefono || '',
+        direccion: c.direccion || '',
+        ciudad: c.ciudad || '',
+        documento: c.documento || '',
+        tipo_documento: c.tipo_documento || 'cc',
+        fecha_registro: c.created_at || '',
+        observaciones: c.observaciones || '',
+        user_id: c.user_id || undefined,
+        origen: c.origen || 'panel',
+      }))
+      const newClientes = reset ? mappedClientes : [...clientes, ...mappedClientes]
       const hasMore = count ? newClientes.length < count : false
 
       set({ 

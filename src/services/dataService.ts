@@ -28,44 +28,139 @@ export const dataService = {
   },
 
   async getCategories(): Promise<Category[]> {
-    if (!checkConfigured) return [];
+    if (!checkConfigured()) return [];
     const { data, error } = await supabase.from('categories').select('*');
     if (error) throw error;
-    return data as Category[];
+    return data.map((c: any) => ({
+      id: c.id,
+      name: c.nombre,
+      description: c.descripcion,
+      image: c.imagen,
+      status: c.activa ? 'active' : 'inactive',
+      created_at: c.created_at,
+    })) as Category[];
   },
 
   async getOrders(): Promise<Order[]> {
-    if (!checkConfigured) return [];
-    const { data, error } = await supabase.from('pedidos').select('*').order('fecha', { ascending: false });
-    if (error) throw error;
-    return data as Order[];
+    if (!checkConfigured()) return [];
+    const { data: ventas, error: err1 } = await supabase.from('direct_sales').select('*').order('created_at', { ascending: false });
+    if (err1) throw err1;
+    const { data: pedidos, error: err2 } = await supabase.from('pos_orders').select('*').order('created_at', { ascending: false });
+    if (err2) throw err2;
+    const all = [...(ventas || []), ...(pedidos || [])];
+    const mapped = all.map((p: any) => ({
+      id: p.codigo,
+      cliente: p.cliente,
+      clienteId: p.cliente_id,
+      email: p.email || '',
+      telefono: p.telefono || '',
+      direccion: p.direccion || '',
+      ciudad: p.ciudad || '',
+      items: p.items || [],
+      monto: p.monto,
+      estado: p.estado,
+      fecha: p.fecha,
+      notas: p.notas,
+      metodo_pago: p.metodo_pago,
+      monto_pagado: p.monto_pagado,
+      cambio: p.cambio,
+      transferencia_imagen: p.transferencia_imagen,
+      tarjeta_last4: p.tarjeta_last4,
+      tarjeta_autori: p.tarjeta_autori,
+      factura_generada: p.factura_generada,
+    }));
+    return mapped as Order[];
   },
 
   async createOrder(order: Order): Promise<Order> {
-    if (!checkConfigured) throw new Error('Supabase no configurado');
-    const { data, error } = await supabase.from('pedidos').insert(order).select().single();
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
+    const isCompletada = order.estado === 'completado';
+    const table = isCompletada ? 'direct_sales' : 'pos_orders';
+    const { data, error } = await supabase.from(table).insert({
+      codigo: order.id,
+      cliente: order.cliente,
+      cliente_id: order.clienteId || null,
+      email: order.email || '',
+      telefono: order.telefono || '',
+      direccion: order.direccion || '',
+      ciudad: order.ciudad || '',
+      items: order.items,
+      monto: order.monto,
+      estado: order.estado,
+      metodo_pago: order.metodo_pago || 'efectivo',
+      monto_pagado: order.monto_pagado || 0,
+      cambio: order.cambio || 0,
+      transferencia_imagen: order.transferencia_imagen || null,
+      tarjeta_last4: order.tarjeta_last4 || null,
+      tarjeta_autori: order.tarjeta_autori || null,
+      factura_generada: order.factura_generada || false,
+      notas: order.notas || '',
+      fecha: order.fecha,
+    }).select().single();
     if (error) throw error;
     return data as Order;
   },
 
   async updateOrder(id: string, updates: Partial<Order>): Promise<void> {
-    if (!checkConfigured) throw new Error('Supabase no configurado');
-    const { error } = await supabase.from('pedidos').update(updates).eq('id', id);
-    if (error) throw error;
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
+    const updateData: any = {};
+    if (updates.estado !== undefined) updateData.estado = updates.estado;
+    if (updates.monto_pagado !== undefined) updateData.monto_pagado = updates.monto_pagado;
+    if (updates.notas !== undefined) updateData.notas = updates.notas;
+    if (updates.items !== undefined) updateData.items = updates.items;
+    if (updates.monto !== undefined) updateData.monto = updates.monto;
+    const { error: err1 } = await supabase.from('direct_sales').update(updateData).eq('codigo', id);
+    if (err1) {
+      const { error: err2 } = await supabase.from('pos_orders').update(updateData).eq('codigo', id);
+      if (err2) throw err2;
+    }
   },
 
   async getClientes(): Promise<Cliente[]> {
-    if (!checkConfigured) return [];
+    if (!checkConfigured()) return [];
     const { data, error } = await supabase.from('clients').select('*');
     if (error) throw error;
-    return data as Cliente[];
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      email: c.email || '',
+      telefono: c.telefono || '',
+      direccion: c.direccion || '',
+      ciudad: c.ciudad || '',
+      documento: c.documento || '',
+      tipo_documento: c.tipo_documento || 'cc',
+      fecha_registro: c.created_at || '',
+      observaciones: c.observaciones || '',
+      user_id: c.user_id || undefined,
+      origen: c.origen || 'panel',
+    })) as Cliente[];
   },
 
   async createCliente(cliente: Cliente): Promise<Cliente> {
-    if (!checkConfigured) throw new Error('Supabase no configurado');
-    const { data, error } = await supabase.from('clients').insert(cliente).select().single();
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
+    const { data, error } = await supabase.from('clients').insert({
+      nombre: cliente.nombre,
+      email: cliente.email || '',
+      telefono: cliente.telefono || '',
+      direccion: cliente.direccion || '',
+      ciudad: cliente.ciudad || '',
+      documento: cliente.documento || '',
+      tipo_documento: cliente.tipo_documento || 'cc',
+      observaciones: cliente.observaciones || '',
+    }).select().single();
     if (error) throw error;
-    return data as Cliente;
+    return {
+      id: data.id,
+      nombre: data.nombre,
+      email: data.email || '',
+      telefono: data.telefono || '',
+      direccion: data.direccion || '',
+      ciudad: data.ciudad || '',
+      documento: data.documento || '',
+      tipo_documento: data.tipo_documento || 'cc',
+      fecha_registro: data.created_at || '',
+      observaciones: data.observaciones || '',
+    } as Cliente;
   },
 
   async getReservas(): Promise<Reserva[]> {
@@ -196,7 +291,7 @@ export const dataService = {
   },
 
   async updateReserva(id: string, updates: Partial<Reserva>): Promise<void> {
-    if (!checkConfigured) throw new Error('Supabase no configurado');
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
     
     const updateData: any = {};
     if (updates.estado_reserva !== undefined) updateData.status = updates.estado_reserva;
@@ -260,18 +355,49 @@ export const dataService = {
   },
 
   async getStockMovements(productId?: string): Promise<StockMovement[]> {
-    if (!checkConfigured) return [];
-    let query = supabase.from('stock_movements').select('*').order('fecha', { ascending: false });
-    if (productId) query = query.eq('productId', productId);
+    if (!checkConfigured()) return [];
+    let query = supabase.from('stock_movements').select('*').order('created_at', { ascending: false });
+    if (productId) query = query.eq('product_id', productId);
     const { data, error } = await query;
     if (error) throw error;
-    return data as StockMovement[];
+    return (data || []).map((m: any) => ({
+      id: m.id,
+      productId: m.product_id,
+      productName: m.product_name || '',
+      tipo: m.tipo,
+      cantidad: m.cantidad,
+      stock_anterior: m.stock_anterior,
+      stock_nuevo: m.stock_nuevo,
+      motivo: m.motivo || '',
+      referencia: m.referencia || '',
+      fecha: m.created_at || '',
+    })) as StockMovement[];
   },
 
   async addStockMovement(movement: StockMovement): Promise<StockMovement> {
-    if (!checkConfigured) throw new Error('Supabase no configurado');
-    const { data, error } = await supabase.from('stock_movements').insert(movement).select().single();
+    if (!checkConfigured()) throw new Error('Supabase no configurado');
+    const { data, error } = await supabase.from('stock_movements').insert({
+      product_id: movement.productId,
+      product_name: movement.productName,
+      tipo: movement.tipo,
+      cantidad: movement.cantidad,
+      stock_anterior: movement.stock_anterior,
+      stock_nuevo: movement.stock_nuevo,
+      motivo: movement.motivo,
+      referencia: movement.referencia,
+    }).select().single();
     if (error) throw error;
-    return data as StockMovement;
+    return {
+      id: data.id,
+      productId: data.product_id,
+      productName: data.product_name || '',
+      tipo: data.tipo,
+      cantidad: data.cantidad,
+      stock_anterior: data.stock_anterior,
+      stock_nuevo: data.stock_nuevo,
+      motivo: data.motivo || '',
+      referencia: data.referencia || '',
+      fecha: data.created_at || '',
+    } as StockMovement;
   },
 };
