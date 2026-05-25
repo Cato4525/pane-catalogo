@@ -98,6 +98,7 @@ export default function SettingsPage() {
   
   const [storeName, setStoreName] = useState(settings.storeName || '');
   const [storeUrl, setStoreUrl] = useState(settings.storeUrl || '');
+  const [costoEnvio, setCostoEnvio] = useState(settings.costo_envio ?? 5);
   const [logo, setLogo] = useState(settings.logo || '');
   const [previewLogo, setPreviewLogo] = useState(settings.logo || '');
   const [logoAlign, setLogoAlign] = useState<'left' | 'center' | 'right'>('left');
@@ -173,7 +174,8 @@ export default function SettingsPage() {
     setSettings({ 
       storeName, 
       storeUrl,
-      logo, 
+      logo,
+      costo_envio: costoEnvio,
       contacts: { 
         ...settings.contacts,
         email, 
@@ -786,6 +788,18 @@ export default function SettingsPage() {
               <div>
                 <label style={labelStyle}>WHATSAPP</label>
                 <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+57 300 123 4567" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>COSTO DE ENVÍO ($)</label>
+                <input
+                  type="number"
+                  value={costoEnvio}
+                  onChange={e => setCostoEnvio(Number(e.target.value))}
+                  placeholder="5"
+                  min={0}
+                  step={0.5}
+                  style={inputStyle}
+                />
               </div>
               <div>
                 <label style={labelStyle}>TELEGRAM</label>

@@ -55,6 +55,7 @@ const defaultSettings: StoreSettings = {
     { id: '3', name: 'Twitter', link: '', icon: '🐦', active: false },
   ],
   shippingFields: defaultShippingFields,
+  costo_envio: 5,
   visitas: 0,
 };
 

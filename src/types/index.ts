@@ -380,6 +380,7 @@ export interface StoreSettings {
   };
   socialNetworks: SocialNetwork[];
   shippingFields: ShippingField[];
+  costo_envio: number;
   tickerMessages?: string[];
   nosotros?: {
     titulo: string;

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../../../store';
 import { DirectSale, SaleStatus, THEME_PRESETS, ThemeType, MetodoPago } from '../../../../types';
 
@@ -20,6 +20,8 @@ export default function VentasPage() {
   const [searchSale, setSearchSale] = useState('');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('all');
   const [metodoFilter, setMetodoFilter] = useState<MetodoPago | 'todos'>('todos');
+  const [salePage, setSalePage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   const filteredSales = useMemo(() => {
     let result = directSales;
@@ -66,6 +68,11 @@ export default function VentasPage() {
     const cancelados = filteredSales.filter(o => o.estado === 'cancelado').length;
     return { totalVentas, totalPagado, completados, cancelados };
   }, [filteredSales]);
+
+  const totalSalePages = Math.ceil(filteredSales.length / ITEMS_PER_PAGE);
+  const displayedSales = filteredSales.slice((salePage - 1) * ITEMS_PER_PAGE, salePage * ITEMS_PER_PAGE);
+
+  useEffect(() => { setSalePage(1) }, [filter, searchSale, dateFilter, metodoFilter]);
 
   const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de eliminar esta venta?')) {
@@ -253,7 +260,7 @@ export default function VentasPage() {
                     No se encontraron ventas
                   </td>
                 </tr>
-              ) : filteredSales.map(order => {
+              ) : displayedSales.map(order => {
                 return (
                   <tr key={order.id}>
                     <td data-label="ID" className="font-mono text-sm" style={{ color: 'var(--text)' }}>{order.id}</td>
@@ -301,6 +308,17 @@ export default function VentasPage() {
               })}
             </tbody>
           </table>
+          {totalSalePages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '16px 0' }}>
+              <button onClick={() => setSalePage(p => Math.max(1, p - 1))} disabled={salePage === 1}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontSize: 13, opacity: salePage === 1 ? 0.4 : 1 }}
+              >← Anterior</button>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{salePage} / {totalSalePages}</span>
+              <button onClick={() => setSalePage(p => Math.min(totalSalePages, p + 1))} disabled={salePage === totalSalePages}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontSize: 13, opacity: salePage === totalSalePages ? 0.4 : 1 }}
+              >Siguiente →</button>
+            </div>
+          )}
         </div>
       </div>
 

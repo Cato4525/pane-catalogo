@@ -161,6 +161,11 @@ export default function Tienda() {
     return matchesCat && matchesSearch;
   });
 
+  const ITEMS_PER_PAGE = 20;
+  const [prodPage, setProdPage] = useState(1);
+  const totalProdPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginatedProducts = filtered.slice((prodPage - 1) * ITEMS_PER_PAGE, prodPage * ITEMS_PER_PAGE);
+
   const storeCategories = categories.filter(c => c.status === 'active');
   const storeColors = colores.filter(c => c.status === 'active').map(c => c.nombre);
   const storeModelos = modelos.filter(m => m.status === 'active').map(m => m.nombre);
@@ -263,7 +268,7 @@ export default function Tienda() {
               </div>
             </div>
             <div className="v-pgrid" ref={productGridRef}>
-              {filtered.map((p, i) => (
+              {paginatedProducts.map((p, i) => (
                 <div key={p.id} className="v-pcard" style={{ animationDelay: `${i * 0.06}s` }}>
                   {(p.en_liquidacion || p.estado_catalogo === 'exclusivo' || p.estado_catalogo === 'tendencia') && <span className={`v-pbadge ${p.en_liquidacion ? 'v-b-sale' : 'v-b-new'}`}>{p.en_liquidacion ? 'Oferta' : p.estado_catalogo}</span>}
                   <button className="v-pwish" onClick={() => toast(`${p.name} agregado a favoritos`)}><HeartIcon /></button>
@@ -286,6 +291,32 @@ export default function Tienda() {
                 </div>
               ))}
             </div>
+            {totalProdPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 }}>
+                <button
+                  onClick={() => setProdPage(p => Math.max(1, p - 1))}
+                  disabled={prodPage === 1}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--rose-dk)', background: 'transparent', color: 'var(--rose-dk)', cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: prodPage === 1 ? 0.4 : 1 }}
+                >← Anterior</button>
+                {Array.from({ length: totalProdPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setProdPage(p)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 8, border: 'none',
+                      background: p === prodPage ? 'var(--rose-dk)' : 'transparent',
+                      color: p === prodPage ? '#fff' : 'var(--rose-dk)',
+                      cursor: 'pointer', fontSize: 13, fontWeight: 600
+                    }}
+                  >{p}</button>
+                ))}
+                <button
+                  onClick={() => setProdPage(p => Math.min(totalProdPages, p + 1))}
+                  disabled={prodPage === totalProdPages}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--rose-dk)', background: 'transparent', color: 'var(--rose-dk)', cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: prodPage === totalProdPages ? 0.4 : 1 }}
+                >Siguiente →</button>
+              </div>
+            )}
           </section>
           <div className="v-banner">
             <div className="v-banner-txt">

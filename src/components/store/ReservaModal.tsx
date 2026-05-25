@@ -43,7 +43,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
     envio: '',
   })
   
-  const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0) + (settings?.costo_envio ?? 5)
   const esMayor40 = total >= 40
   
   const abonoMinimo = esMayor40 ? total * 0.2 : 5

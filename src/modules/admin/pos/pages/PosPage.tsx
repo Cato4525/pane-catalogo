@@ -136,7 +136,8 @@ export default function PosPage() {
     return sum + (price * item.quantity)
   }, 0)
 
-  const total = subtotal
+  const costoEnvio = settings?.costo_envio ?? 5
+  const total = subtotal + costoEnvio
 
   const selectedClientData = clientes.find(c => c.id === selectedClient)
 
@@ -327,6 +328,14 @@ export default function PosPage() {
               ))}
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', marginBottom: 4 }}>
+              <span>Subtotal</span>
+              <span>${(displayTotal - costoEnvio).toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', marginBottom: 4 }}>
+              <span>Envío</span>
+              <span>${costoEnvio.toFixed(2)}</span>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
               <span>TOTAL</span>
               <span>${displayTotal.toFixed(2)}</span>
@@ -508,7 +517,7 @@ export default function PosPage() {
         @media (max-width: 767px) {
           .pos-layout { overflow: auto !important; height: auto !important; min-height: calc(100vh - 120px) !important; }
           .pos-products { max-height: 50vh !important; overflow: auto !important; }
-          .pos-cart { max-height: 40vh !important; overflow: auto !important; }
+          .pos-cart { max-height: none !important; overflow: auto !important; }
         }
       `}</style>
       <div className="pos-layout" style={{ 
@@ -566,7 +575,7 @@ export default function PosPage() {
       {/* Contenido principal */}
       <div className="pos-content" style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, flexDirection: 'column', overflow: 'hidden' }}>
         {/* Panel Izquierdo - Productos */}
-        <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: tc.surface, borderRadius: 16, padding: 16 }}>
+        <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: tc.surface, borderRadius: 16, padding: 16, maxHeight: 'calc(100vh - 200px)' }}>
           {/* Buscador */}
           <div style={{ marginBottom: 12, flexShrink: 0 }}>
             <div style={{ position: 'relative' }}>
@@ -654,7 +663,7 @@ export default function PosPage() {
         </div>
 
         {/* Panel Derecho - Carrito */}
-        <div className="pos-cart" style={{ width: '100%', minWidth: 0, background: tc.surface, border: `1px solid ${tc.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, maxHeight: '50vh' }}>
+        <div className="pos-cart" style={{ width: '100%', minWidth: 0, background: tc.surface, border: `1px solid ${tc.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${tc.border}` }}>
           <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600, color: tc.text }}>Punto de Venta</h3>
           
@@ -712,35 +721,37 @@ export default function PosPage() {
               Agrega productos al carrito
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {cart.map(item => {
                 const price = item.product.en_liquidacion && item.product.precio_liquidacion
                   ? item.product.precio_liquidacion
                   : item.product.price
                 return (
-                  <div key={item.product.id} style={{ display: 'flex', gap: 10, padding: 10, background: tc.background, borderRadius: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: tc.text }}>{item.product.name}</div>
-                      <div style={{ fontSize: 11, color: tc.primary }}>${price.toFixed(2)} c/u</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div key={item.product.id} style={{ padding: 12, background: tc.background, borderRadius: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: tc.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product.name}</div>
+                        <div style={{ fontSize: 11, color: tc.primary }}>${price.toFixed(2)} c/u</div>
+                      </div>
                       <button
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                        style={{ width: 24, height: 24, borderRadius: 4, background: tc.border, border: 'none', color: tc.text, cursor: 'pointer', fontSize: 14 }}
-                      >-</button>
-                      <span style={{ fontSize: 12, color: tc.text, minWidth: 20, textAlign: 'center' }}>{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                        style={{ width: 24, height: 24, borderRadius: 4, background: tc.border, border: 'none', color: tc.text, cursor: 'pointer', fontSize: 14 }}
-                      >+</button>
+                        onClick={() => removeFromCart(item.product.id)}
+                        style={{ background: 'none', border: 'none', color: tc.error, cursor: 'pointer', fontSize: 18, padding: '0 4px', marginLeft: 8, flexShrink: 0 }}
+                      >✕</button>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: tc.text }}>${(price * item.quantity).toFixed(2)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                          style={{ width: 32, height: 32, borderRadius: 8, background: tc.surface, border: `1px solid ${tc.border}`, color: tc.text, cursor: 'pointer', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >−</button>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: tc.text, minWidth: 28, textAlign: 'center' }}>{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                          style={{ width: 32, height: 32, borderRadius: 8, background: tc.surface, border: `1px solid ${tc.border}`, color: tc.text, cursor: 'pointer', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >+</button>
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: tc.text }}>${(price * item.quantity).toFixed(2)}</span>
                     </div>
-                    <button
-                      onClick={() => removeFromCart(item.product.id)}
-                      style={{ background: 'none', border: 'none', color: tc.error, cursor: 'pointer', fontSize: 14, padding: '0 4px' }}
-                    >×</button>
                   </div>
                 )
               })}

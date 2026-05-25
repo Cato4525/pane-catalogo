@@ -27,6 +27,8 @@ export default function ReservasPOSPage() {
   const [editNotas, setEditNotas] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [reservaPage, setReservaPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   const filteredReservas = useMemo(() => {
     let result = reservas;
@@ -52,6 +54,11 @@ export default function ReservasPOSPage() {
 
     return result;
   }, [reservas, filtroAbono, searchQuery]);
+
+  const totalReservaPages = Math.ceil(filteredReservas.length / ITEMS_PER_PAGE);
+  const displayedReservas = filteredReservas.slice((reservaPage - 1) * ITEMS_PER_PAGE, reservaPage * ITEMS_PER_PAGE);
+
+  useEffect(() => { setReservaPage(1) }, [filtroAbono, searchQuery]);
 
   const stats = useMemo(() => {
     const sinAbono = reservas.filter(r => r.estado_reserva === 'pendiente').length;
@@ -313,7 +320,7 @@ export default function ReservasPOSPage() {
                   No se encontraron reservas
                 </td>
               </tr>
-            ) : filteredReservas.map(r => (
+            ) : displayedReservas.map(r => (
               <tr key={r.id} style={{ borderTop: `1px solid ${tc.border}` }}>
                 <td data-label="ID" style={{ padding: '12px 16px', fontSize: 12, color: tc.text, fontFamily: 'monospace' }}>{r.id}</td>
                 <td data-label="Cliente" style={{ padding: '12px 16px' }}>
@@ -352,6 +359,17 @@ export default function ReservasPOSPage() {
             ))}
           </tbody>
         </table>
+        {totalReservaPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '16px 0' }}>
+            <button onClick={() => setReservaPage(p => Math.max(1, p - 1))} disabled={reservaPage === 1}
+              style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 13, opacity: reservaPage === 1 ? 0.4 : 1 }}
+            >← Anterior</button>
+            <span style={{ fontSize: 13, color: tc.textMuted }}>{reservaPage} / {totalReservaPages}</span>
+            <button onClick={() => setReservaPage(p => Math.min(totalReservaPages, p + 1))} disabled={reservaPage === totalReservaPages}
+              style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 13, opacity: reservaPage === totalReservaPages ? 0.4 : 1 }}
+            >Siguiente →</button>
+          </div>
+        )}
       </div>
 
       {/* Modal detalles */}
