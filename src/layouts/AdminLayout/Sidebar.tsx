@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import { useAuthStore, logout } from '../../store/authStore'
 import { THEME_PRESETS, ThemeType } from '../../types'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useNotificationStore } from '../../store/notificationStore'
 
 const adminItems = [
   {
@@ -62,6 +63,27 @@ const adminItems = [
     icon: (
       <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+    roles: ['admin', 'soporte'],
+  },
+  {
+    path: '/admin/marketing',
+    label: 'Marketing',
+    icon: (
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+      </svg>
+    ),
+    roles: ['admin', 'soporte'],
+  },
+  {
+    path: '/admin/catalogos',
+    label: 'Catálogos',
+    icon: (
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     ),
     roles: ['admin', 'soporte'],
@@ -156,11 +178,13 @@ const getRoleColor = (rol: string) => {
   return colors[rol] || '#666'
 }
 
-export function Sidebar() {
+export function Sidebar({ isMob, open, onToggle }: { isMob?: boolean; open?: boolean; onToggle?: () => void }) {
   const user = useAuthStore((state) => state.user)
   const navigate = useNavigate()
   const settings = useStore((s) => s.settings)
   const { hasPermission } = usePermissions()
+  const unreadReservas = useNotificationStore(s => s.unreadReservas)
+  const unreadConsultas = useNotificationStore(s => s.unreadConsultas)
   
   const theme = (settings?.theme || 'moderno') as ThemeType
   const themeColors = THEME_PRESETS[theme] || THEME_PRESETS.moderno
@@ -214,6 +238,9 @@ export function Sidebar() {
           padding: 24px 20px 20px;
           border-bottom: 1px solid var(--border);
           flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
         }
 
         .sidebar-brand {
@@ -296,6 +323,20 @@ export function Sidebar() {
 
         .nav-link.active .nav-icon {
           color: #3b82f6;
+        }
+
+        .sidebar-badge {
+          min-width: 18px;
+          height: 18px;
+          padding: 0 4px;
+          border-radius: 9px;
+          background: #ef4444;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .nav-icon {
@@ -440,9 +481,18 @@ export function Sidebar() {
           font-size: 11px;
           color: #c8a96e;
         }
+
+        @media(max-width:768px){
+          .sidebar{transform:translateX(-100%);transition:transform 0.3s ease;z-index:50!important}
+          .sidebar.open{transform:translateX(0)}
+          .sidebar-close{display:flex!important}
+        }
+        @media(min-width:769px){
+          .sidebar-close{display:none!important}
+        }
       `}</style>
 
-      <aside className="sidebar" style={{ background: themeColors.surface, borderColor: themeColors.border }}>
+      <aside className={`sidebar${open ? ' open' : ''}`} style={{ background: themeColors.surface, borderColor: themeColors.border }}>
         <div className="sidebar-header" style={{ borderColor: themeColors.border }}>
           <div className="sidebar-brand">
             {storeLogo ? (
@@ -455,21 +505,37 @@ export function Sidebar() {
             <span className="sidebar-title" style={{ color: themeColors.text, fontSize: 16 }}>{storeName}</span>
           </div>
           <div className="sidebar-subtitle" style={{ color: themeColors.textMuted }}>Admin Panel</div>
+          <button className="sidebar-close" onClick={onToggle} style={{
+            background: 'none', border: 'none', color: themeColors.textMuted,
+            cursor: 'pointer', fontSize: 20, padding: 4, display: 'none',
+          }} aria-label="Cerrar menú">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <nav className="sidebar-nav">
           <div className="nav-section-label">Menú</div>
-          {filteredNavItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.end}
-              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-            </NavLink>
-          ))}
+          {filteredNavItems.map((item) => {
+            const badgeCount = item.path === '/admin/reservas' ? unreadReservas
+              : item.path === '/admin/consultas' ? unreadConsultas
+              : 0
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="sidebar-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
+                )}
+              </NavLink>
+            )
+          })}
 
           {filteredToolsItems.length > 0 && (
             <>

@@ -1,0 +1,4 @@
+@media(max-width:768px){
+  .settings-grid-2{grid-template-columns:1fr!important}
+  .settings-grid-3{grid-template-columns:1fr!important}
+}

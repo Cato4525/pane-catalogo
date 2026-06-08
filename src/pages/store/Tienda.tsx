@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store';
-import { Product } from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { Product, CatalogoSeccion, StockByVariant, ConsultaProducto } from '../../types';
+import { fetchCatalogos } from '../../services/catalogosService';
+import { dataService } from '../../services/dataService';
 import ReservaModal from '../../components/store/ReservaModal';
 import AuthModal from '../../components/store/AuthModal';
 import MisReservas from '../../components/store/MisReservas';
+import { calcularMejorCampania } from '../../services/promocionesService';
 import { SearchIcon, CartIcon, HomeIcon, PackageIcon, ChatIcon, UserIcon, TrashIcon, MailIcon, PhoneIcon, HeartIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MinusIcon, PlusIcon, CheckIcon } from './Icons';
 import './store.css';
 
@@ -32,6 +37,7 @@ export default function Tienda() {
   const categories = useStore((state) => state.categories);
   const colores = useStore((state) => state.colors);
   const modelos = useStore((state) => state.modelos);
+  const addConsulta = useStore((state) => state.addConsulta);
   const [slideIndex, setSlideIndex] = useState(0);
 
   const activeProducts = products.filter(p => p.status === 'active').slice(0, 7);
@@ -54,6 +60,17 @@ export default function Tienda() {
   useEffect(() => {
     incrementVisitas();
   }, [incrementVisitas]);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '')
+    if (hash === 'catalogo') {
+      setTimeout(() => catalogSectionRef.current?.scrollIntoView({ behavior: "smooth" }), 300)
+    } else if (hash === 'contacto') {
+      setPage('contacto')
+    } else if (hash === 'nosotros') {
+      setPage('nosotros')
+    }
+  }, [])
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [detalle, setDetalle] = useState<Product | null>(null);
@@ -64,93 +81,140 @@ export default function Tienda() {
   const [reservaTipo] = useState<'con_abono'>('con_abono');
   const [filterCat, setFilterCat] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
   const [page, setPage] = useState<"tienda" | "contacto" | "nosotros">("tienda");
   const [contactForm, setContactForm] = useState({ nombre: '', email: '', mensaje: '' });
   const [authOpen, setAuthOpen] = useState(false);
   const [misReservasOpen, setMisReservasOpen] = useState(false);
-  const productGridRef = useRef<HTMLDivElement>(null);
+  const [promoActiva, setPromoActiva] = useState(false)
+  const [catalogos, setCatalogos] = useState<CatalogoSeccion[]>([])
+  const [variantPicker, setVariantPicker] = useState<{ product: Product; variants: StockByVariant[] } | null>(null)
+  const [selectedCatalogoId, setSelectedCatalogoId] = useState<string>('')
+  const [promoResult, setPromoResult] = useState<{
+    subtotal: number; totalDiscount: number; envio: number; envioGratis: boolean;
+    total: number; promocionesAplicadas: { descripcion: string }[];
+  } | null>(null)
 
-  const [isClienteLogueado, setIsClienteLogueado] = useState(false);
-  const [clienteNombre, setClienteNombre] = useState('');
-  const [clienteEmail, setClienteEmail] = useState('');
-  
-  useEffect(() => {
-    const checkLogin = () => {
-      setIsClienteLogueado(!!localStorage.getItem('cliente_id'));
-      setClienteNombre(localStorage.getItem('cliente_nombre') || '');
-      setClienteEmail(localStorage.getItem('cliente_email') || '');
-    };
-    checkLogin();
-    window.addEventListener('storage', checkLogin);
-    const interval = setInterval(checkLogin, 1000);
-    return () => {
-      window.removeEventListener('storage', checkLogin);
-      clearInterval(interval);
-    };
-  }, []);
+  const user = useAuthStore(s => s.user)
+  const isClienteLogueado = !!user
+  const clienteNombre = user?.nombre || ''
+  const handleLogout = () => useAuthStore.getState().logout()
 
-  const handleLogout = () => {
-    localStorage.removeItem('cliente_id');
-    localStorage.removeItem('cliente_nombre');
-    localStorage.removeItem('cliente_email');
-    window.location.reload();
-  };
-
-  useEffect(() => {
-    const clienteNombre = localStorage.getItem('cliente_nombre');
-    if (clienteNombre) {
-      setContactForm(prev => ({ ...prev, nombre: clienteNombre }));
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setSlideIndex((i) => (i + 1) % V_SLIDES.length), 5500);
-    return () => clearInterval(timer);
-  }, []);
+  const productGridRef = useRef<HTMLDivElement>(null)
+  const catalogSectionRef = useRef<HTMLElement>(null)
+  const totalQty = cart.reduce((sum, i) => sum + i.qty, 0)
+  const rawSubtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0)
+  const costoEnvioBase = settings?.costo_envio ?? 5
+  const subtotal = (promoActiva && promoResult) ? promoResult.subtotal : rawSubtotal
+  const descuentoTotal = (promoActiva && promoResult) ? promoResult.totalDiscount : 0
+  const costoEnvio = (promoActiva && promoResult) ? promoResult.envio : costoEnvioBase
+  const total = (promoActiva && promoResult) ? promoResult.total : (rawSubtotal + costoEnvioBase)
 
   const toast = (msg: string) => {
-    const w = document.getElementById('toastWrap');
-    if (!w) return;
-    const t = document.createElement('div');
-    t.className = 'v-toast';
-    t.innerHTML = `<span class="v-t-ic">✿</span> ${msg}`;
-    w.appendChild(t);
-    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 2800);
-  };
+    const el = document.getElementById('toastWrap')
+    if (el) { el.innerHTML = `<div style="background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;margin-bottom:6px;animation:fadeIn .3s">${msg}</div>`; setTimeout(() => el.innerHTML = '', 2500) }
+  }
 
-  const addToCart = (p: Product, variant?: { colorId?: string; colorName?: string; colorHex?: string; sizeId?: string; sizeName?: string; stock?: number; precio?: number }) => {
-    const variantKey = variant ? `${variant.colorId}-${variant.sizeId}` : ''
-    const variantPrice = variant?.precio || p.price
+  const handleAddProduct = (product: Product) => {
+    const variants = (product as any).stockByVariants as StockByVariant[] | undefined
+    if (variants && variants.length > 0) {
+      setVariantPicker({ product, variants })
+      return
+    }
+    addToCart(product)
+    toast(`${product.name} añadido`)
+  }
+
+  const addToCart = (product: Product, variant?: any) => {
     setCart(prev => {
-      const ex = prev.find(i => i.id === p.id && (variant ? (i as any).variantKey === variantKey : true));
-      if (ex) {
-        const currentQty = ex.qty || 1
-        const maxStock = variant?.stock || 999
-        return prev.map(i => i.id === p.id && (variant ? (i as any).variantKey === variantKey : true) 
-          ? { ...i, qty: Math.min(currentQty + 1, maxStock) } 
-          : i);
-      }
-      return [...prev, { ...p, price: variantPrice, qty: 1, variantKey, ...variant }];
-    });
-  };
+      const key = variant ? `${product.id}-${variant.colorId || ''}-${variant.sizeId || ''}` : product.id
+      const existing = prev.find(i => {
+        if (variant && i.variantKey) return i.variantKey === key
+        return i.id === product.id && !i.variantKey
+      })
+      if (existing) return prev.map(i => (i === existing ? { ...i, qty: i.qty + 1 } : i))
+      return [...prev, { ...product, qty: 1, variantKey: variant ? key : undefined, ...(variant || {}) }]
+    })
+  }
 
-  const removeFromCart = (id: string) => setCart(prev => prev.filter(i => i.id !== id));
-  const updateQty = (id: string, d: number) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + d) } : i));
-  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+  const removeFromCart = (productId: string) => setCart(prev => prev.filter(i => i.id !== productId))
 
-  const handleContactSubmit = () => {
+  const updateQty = (productId: string, delta: number) => {
+    setCart(prev => prev.map(i => i.id === productId ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0))
+  }
+
+  useEffect(() => {
+    fetchCatalogos().then(list => {
+      const seen = new Set<string>()
+      setCatalogos(list.filter(c => { if (seen.has(c.nombre)) return false; seen.add(c.nombre); return true }))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (cart.length === 0) { setPromoResult(null); setPromoActiva(false); return }
+    const costo = settings?.costo_envio ?? 5
+    calcularMejorCampania(
+      cart.map(i => ({ producto: i, cantidad: i.qty })),
+      costo
+    ).then((r: any) => {
+      if (r) {
+        setPromoResult({
+          subtotal: r.subtotalOriginal,
+          totalDiscount: r.descuentoTotal,
+          envio: r.envio,
+          envioGratis: r.envioGratis,
+          total: r.total,
+          promocionesAplicadas: r.promocionesAplicadas,
+        })
+      } else { setPromoResult(null) }
+      setPromoActiva(false)
+    })
+  }, [cart, settings?.costo_envio])
+
+  const handleContactSubmit = async () => {
     if (!contactForm.mensaje.trim()) {
       toast('Por favor escribe un mensaje');
       return;
     }
+    const now = new Date().toISOString()
+    const primerProducto = products.find(p => p.status === 'active')
+    const consultaDB = {
+      product_id: primerProducto?.id || '',
+      cliente_nombre: contactForm.nombre || 'Anónimo',
+      cliente_email: contactForm.email || '',
+      mensaje: contactForm.mensaje,
+      origen: 'tienda',
+      created_at: now,
+    }
     const phone = settings?.contacts?.whatsapp?.replace(/\D/g, '') || '593999999999';
     const mensaje = `*Nuevo mensaje de contacto*\n\n*Nombre:* ${contactForm.nombre || 'No especificado'}\n*Email:* ${contactForm.email || 'No especificado'}\n\n*Mensaje:*\n${contactForm.mensaje}`;
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-    window.open(url, '_blank');
+    const wa = window.open(url, '_blank');
+    if (!wa) {
+      window.location.href = url;
+    }
+    let consultaCreada: ConsultaProducto | null = null
+    try {
+      const saved = await dataService.createConsulta(consultaDB)
+      if (saved) consultaCreada = saved
+    } catch (e) {
+      console.error('Error guardando consulta:', e)
+    }
+    const consulta: ConsultaProducto = {
+      id: consultaCreada?.id || `CON-${Date.now()}`,
+      product_id: primerProducto?.id || '',
+      fecha: now,
+      origen: 'tienda'
+    }
+    addConsulta(consulta)
     toast('Mensaje enviado por WhatsApp');
     setContactForm({ nombre: '', email: '', mensaje: '' });
   };
+
+  const selectedCatalogo = catalogos.find(c => c.id === selectedCatalogoId)
+  const catalogoProductIds = selectedCatalogo && selectedCatalogo.nombre !== 'Todos'
+    ? new Set(selectedCatalogo.productos?.map(p => p.producto_id) || [])
+    : null
 
   const filtered = products.filter(p => {
     const matchesCat = filterCat.length === 0 || filterCat.includes(p.category);
@@ -158,7 +222,8 @@ export default function Tienda() {
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.codigo || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesSearch;
+    const matchesCatalogo = !catalogoProductIds || catalogoProductIds.has(p.id);
+    return matchesCat && matchesSearch && matchesCatalogo;
   });
 
   const ITEMS_PER_PAGE = 20;
@@ -169,6 +234,7 @@ export default function Tienda() {
   const storeCategories = categories.filter(c => c.status === 'active');
   const storeColors = colores.filter(c => c.status === 'active').map(c => c.nombre);
   const storeModelos = modelos.filter(m => m.status === 'active').map(m => m.nombre);
+  const modelosMap = Object.fromEntries(modelos.filter(m => m.status === 'active').map(m => [m.id, m.nombre]));
 
   const storeName = settings?.storeName || "VELOUR";
   const logo = settings?.logo;
@@ -176,7 +242,19 @@ export default function Tienda() {
   const clientesCount = clientes?.length || 0;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fdf8f6", fontFamily: "'Jost',sans-serif", color: "#2b1f23", overflowX: "hidden" }}>
+    <div style={{ 
+      minHeight: "100vh", 
+      background: settings?.backgroundImage 
+        ? `url(${settings.backgroundImage}) center/cover fixed no-repeat` 
+        : "#fdf8f6", 
+      fontFamily: "'Jost',sans-serif", 
+      color: "#2b1f23", 
+      overflowX: "hidden" 
+    }}>
+      {settings?.backgroundImage && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      <div style={{ position: 'relative', zIndex: 1 }}>
       <nav className="v-nav">
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none" }}>
           {logo ? (
@@ -195,9 +273,10 @@ export default function Tienda() {
         </div>
         <ul className="v-nav-links">
           <li><a href="#" onClick={(e) => { e.preventDefault(); setPage("tienda"); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Inicio</a></li>
-          <li><a href="#" onClick={(e) => { e.preventDefault(); setPage("tienda"); setTimeout(() => productGridRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}>Catálogo</a></li>
-          <li><a href="#" onClick={() => setPage("contacto")}>Contacto</a></li>
-          <li><a href="#" onClick={() => setPage("nosotros")}>Nosotros</a></li>
+          <li><a href="#" onClick={(e) => { e.preventDefault(); setPage("tienda"); setTimeout(() => catalogSectionRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}>Catálogo</a></li>
+          <li><a href="#" onClick={(e) => { e.preventDefault(); setPage("contacto"); }}>Contacto</a></li>
+          <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/tienda/promociones'); }}>Promociones</a></li>
+          <li><a href="#" onClick={(e) => { e.preventDefault(); setPage("nosotros"); }}>Nosotros</a></li>
           {isClienteLogueado ? (
             <>
               <li><a href="#" onClick={() => setMisReservasOpen(true)}>Mis Reservas</a></li>
@@ -238,6 +317,10 @@ export default function Tienda() {
                     </div>
                     <div className="v-slide-img"><img src={s.image} alt={s.titleLines[0]} /></div>
                     <div className="v-price-tag">${s.price.toLocaleString()}</div>
+                    <div className="v-product-count-badge">
+                      <span className="v-pcb-num">{products.filter(p => p.status === 'active').length}</span>
+                      <span className="v-pcb-label">productos activos</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -255,16 +338,32 @@ export default function Tienda() {
               {[...V_TICKER, ...V_TICKER].map((t, i) => <span key={i} className="v-marq-item">{t}</span>)}
             </div>
           </div>
-          <section className="v-section" id="catalogo">
+          <section className="v-section" id="catalogo" ref={catalogSectionRef}>
             <div className="v-sec-header">
               <div>
                 <div className="v-sec-eyebrow">{searchQuery ? `Buscando: "${searchQuery}"` : 'Nuestra Selección'}</div>
                 <h2 className="v-sec-title">{searchQuery ? `${filtered.length} resultados` : <>Catálogo <em>Completo</em></>}</h2>
+                {!searchQuery && (
+                  <p style={{ fontSize: 12, color: 'var(--gray)', marginTop: 4 }}>
+                    {products.filter(p => p.status === 'active').length} productos activos
+                  </p>
+                )}
                 {searchQuery && <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", color: "var(--rose-dk)", cursor: "pointer", fontSize: 12, marginTop: 8 }}>← Limpiar</button>}
               </div>
-              <div className="v-filters">
-                <button className={`v-ftab ${filterCat.length === 0 ? 'active' : ''}`} onClick={() => setFilterCat([])}>Todos</button>
-                {storeCategories.map(cat => <button key={cat.id} className={`v-ftab ${filterCat.includes(cat.id) ? 'active' : ''}`} onClick={() => setFilterCat([cat.id])}>{cat.name}</button>)}
+              <div>
+                <div className="v-filters" style={{ marginBottom: 6 }}>
+                  <button className={`v-ftab ${filterCat.length === 0 ? 'active' : ''}`} onClick={() => setFilterCat([])}>Todos</button>
+                  {catalogos.map(cat => (
+                    <button
+                      key={cat.id}
+                      className={`v-ftab ${selectedCatalogoId === cat.id ? 'active' : ''}`}
+                      onClick={() => setSelectedCatalogoId(selectedCatalogoId === cat.id ? '' : cat.id)}
+                    >{cat.nombre}</button>
+                  ))}
+                </div>
+                <div className="v-filters">
+                  {storeCategories.map(cat => <button key={cat.id} className={`v-ftab ${filterCat.includes(cat.id) ? 'active' : ''}`} onClick={() => setFilterCat([cat.id])}>{cat.name}</button>)}
+                </div>
               </div>
             </div>
             <div className="v-pgrid" ref={productGridRef}>
@@ -275,17 +374,37 @@ export default function Tienda() {
                   <div className="v-pimg">
                     <div className="v-pplaceholder">{p.images?.[0] ? <img src={p.images[0]} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : <PackageIcon />}</div>
                     <div className="v-poverlay">
-                      <button className="v-ov-btn v-ov-btn-p" onClick={(e) => { e.stopPropagation(); addToCart(p); toast(`${p.name} añadido`); }}>+ Agregar</button>
+                      <button className="v-ov-btn v-ov-btn-p" onClick={(e) => { e.stopPropagation(); handleAddProduct(p); }}>+ Agregar</button>
                       <button className="v-ov-btn v-ov-btn-s" onClick={() => setDetalle(p)}>Ver Detalle</button>
+                    </div>
+                    <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, pointerEvents: 'none', display: 'flex', gap: 4, alignItems: 'center' }}>
+                      {p.codigo && <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 8px', borderRadius: 4, letterSpacing: '0.05em', fontFamily: "'Cormorant Garamond',serif" }}>{p.codigo}</div>}
+                      {(p.images?.length || 0) > 1 && <div style={{ fontSize: 9, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: 4 }}>{p.images?.length} fotos</div>}
                     </div>
                   </div>
                   <div className="v-pinfo">
-                    <div className="v-pcat">{categories.find(c => c.id === p.category)?.name || 'Leggings'}</div>
-                    <div className="v-pname">{p.name}</div>
-                    <div className="v-pmodelo">{p.modelo} · {p.color}</div>
+                    <div style={{ fontSize: 10, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 1 }}>{categories.find(c => c.id === p.category)?.name || ''}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111', lineHeight: 1.2, marginBottom: 4 }}>{p.name}</div>
+                    {p.stockByVariants && p.stockByVariants.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 4 }}>
+                        {[...new Map(p.stockByVariants.filter(v => v.stock > 0).map(v => [v.colorId, v]))].map(([_, v]) => (
+                          <span key={v.colorId} style={{
+                            width: 12, height: 12, borderRadius: '50%',
+                            background: v.colorHex || '#ccc',
+                            border: '1px solid #d1d5db', display: 'inline-block',
+                          }} title={v.colorName} />
+                        ))}
+                        {[...new Set(p.stockByVariants.filter(v => v.stock > 0).map(v => v.colorId))].length > 0 ? (
+                          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 2 }}>
+                            {[...new Set(p.stockByVariants.filter(v => v.stock > 0).map(v => v.colorId))].length} colores
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 10, color: '#ef4444' }}>sin stock</span>
+                        )}
+                      </div>
+                    )}
                     <div className="v-pfooter">
                       <span className="v-pprice">${p.price.toFixed(2)}</span>
-                      <button className="v-add-btn" onClick={(e) => { e.stopPropagation(); addToCart(p); toast(`${p.name} añadido`); }}>+</button>
                     </div>
                   </div>
                 </div>
@@ -342,10 +461,12 @@ export default function Tienda() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40 }} className="contact-grid">
               <div>
-                <p style={{ fontSize: 15, color: "var(--mauve)", marginBottom: 30 }}>Cualquier duda sobre productos, pedidos o colaboraciones.</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 15 }}><div style={{ width: 50, height: 50, background: "var(--petal)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--rose-dk)" }}><MailIcon /></div><div><p style={{ fontSize: 11, color: "var(--gray)", textTransform: "uppercase" }}>Email</p><p style={{ fontSize: 14 }}>{settings?.contacts?.email || 'hola@email.com'}</p></div></div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 15 }}><div style={{ width: 50, height: 50, background: "var(--petal)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--rose-dk)" }}><PhoneIcon /></div><div><p style={{ fontSize: 11, color: "var(--gray)", textTransform: "uppercase" }}>WhatsApp</p><p style={{ fontSize: 14 }}>{settings?.contacts?.whatsapp || '+57 300 000 0000'}</p></div></div>
+                <div style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 12, padding: '20px 24px' }}>
+                  <p style={{ fontSize: 15, color: "var(--mauve)", marginBottom: 24 }}>Cualquier duda sobre productos, pedidos o colaboraciones.</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 15, background: 'rgba(255,255,255,0.8)', borderRadius: 10, padding: '12px 16px' }}><div style={{ width: 44, height: 44, background: "var(--petal)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--rose-dk)" }}><MailIcon /></div><div><p style={{ fontSize: 11, color: "var(--gray)", textTransform: "uppercase" }}>Email</p><p style={{ fontSize: 14, color: '#111', fontWeight: 600 }}>{settings?.contacts?.email || 'hola@email.com'}</p></div></div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 15, background: 'rgba(255,255,255,0.8)', borderRadius: 10, padding: '12px 16px' }}><div style={{ width: 44, height: 44, background: "var(--petal)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--rose-dk)" }}><PhoneIcon /></div><div><p style={{ fontSize: 11, color: "var(--gray)", textTransform: "uppercase" }}>WhatsApp</p><p style={{ fontSize: 14, color: '#111', fontWeight: 600 }}>{settings?.contacts?.whatsapp || '+57 300 000 0000'}</p></div></div>
+                  </div>
                 </div>
               </div>
               <div style={{ background: "#fff", padding: 30, borderRadius: 16, border: "1px solid rgba(244,194,200,0.4)" }} className="contact-form">
@@ -431,6 +552,7 @@ export default function Tienda() {
         <button className={page === "tienda" ? "active logged-in" : ""} onClick={() => { setPage("tienda"); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><span><HomeIcon /></span>Inicio</button>
         <button onClick={() => productGridRef.current?.scrollIntoView({ behavior: "smooth" })}><span><PackageIcon /></span>Productos</button>
         <button onClick={() => setPage("contacto")}><span><ChatIcon /></span>Contacto</button>
+        <button onClick={() => navigate('/tienda/promociones')}><span><PackageIcon /></span>Promos</button>
         <button onClick={() => setCartOpen(true)}><span><CartIcon /></span>Carrito{totalQty > 0 && ` (${totalQty})`}</button>
         <button 
           onClick={() => {
@@ -493,7 +615,7 @@ export default function Tienda() {
                       </div>
                       <div className="v-cart-item-info">
                         <p className="v-cart-item-name">{item.name}</p>
-                        <p className="v-cart-item-meta">{item.modelo} · {item.color}</p>
+                        <p className="v-cart-item-meta">{modelosMap[item.modelo] ? `${modelosMap[item.modelo]} · ` : ''}{item.color}</p>
                         <div className="v-cart-item-actions">
                           <div className="v-cart-qty">
                             <button onClick={() => updateQty(item.id, -1)} className="v-cart-qty-btn v-cart-qty-minus"><MinusIcon /></button>
@@ -512,7 +634,43 @@ export default function Tienda() {
                 <div className="v-cart-footer">
                   <div className="v-cart-subtotal">
                     <span>Subtotal</span>
-                    <span>${total.toFixed(2)}</span>
+                    <span>${subtotal.toFixed(2)}</span>
+                  </div>
+                  {descuentoTotal > 0 && (
+                    <div className="v-cart-subtotal" style={{ color: '#22c55e' }}>
+                      <span>Descuento</span>
+                      <span>-${descuentoTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {promoResult && promoResult.promocionesAplicadas.length > 0 && (
+                    <button
+                      onClick={() => setPromoActiva(!promoActiva)}
+                      style={{
+                        width: '100%', padding: '8px 14px', borderRadius: 10, border: promoActiva ? 'none' : '2px solid var(--rose-dk)',
+                        background: promoActiva ? 'var(--rose-dk)' : 'var(--rose-dk)15',
+                        color: promoActiva ? '#fff' : 'var(--rose-dk)',
+                        fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        marginBottom: 10,
+                      }}
+                    >
+                      {promoActiva ? '✅ Promo aplicada' : '🎉 Promo disponible'}
+                      {!promoActiva && <span style={{ fontSize: 10, fontWeight: 400 }}>— toca para aplicar</span>}
+                    </button>
+                  )}
+                  {promoActiva && promoResult?.promocionesAplicadas && promoResult.promocionesAplicadas.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      {promoResult.promocionesAplicadas.map((p, i) => (
+                        <div key={i} style={{ fontSize: 10, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                          <span>🏷️</span>
+                          <span>{p.descripcion}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="v-cart-subtotal">
+                    <span>Envío</span>
+                    <span>{promoActiva && promoResult?.envioGratis ? <span style={{ color: '#22c55e' }}>GRATIS</span> : `$${costoEnvio.toFixed(2)}`}</span>
                   </div>
                   <div className="v-cart-total">
                     <span>Total</span>
@@ -530,6 +688,84 @@ export default function Tienda() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {variantPicker && (
+        <div className="v-detail-overlay">
+          <div className="v-detail-backdrop" onClick={() => setVariantPicker(null)} />
+          <div className="v-detail-modal" style={{ maxWidth: 420 }}>
+            <button className="v-detail-close" onClick={() => setVariantPicker(null)}><CloseIcon /></button>
+            <div style={{ padding: 24 }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, color: '#111827' }}>
+                {variantPicker.product.name}
+              </h3>
+              {variantPicker.product.codigo && (
+                <p style={{ margin: '0 0 16px', fontSize: 12, color: '#6b7280' }}>
+                  Código: {variantPicker.product.codigo}
+                </p>
+              )}
+              {Object.entries(
+                variantPicker.variants.reduce((acc, v) => {
+                  if (!acc[v.colorId]) acc[v.colorId] = { colorName: v.colorName, colorHex: v.colorHex, colorImage: v.colorImage, sizes: [] as StockByVariant[] }
+                  acc[v.colorId].sizes.push(v)
+                  return acc
+                }, {} as Record<string, { colorName: string; colorHex: string; colorImage?: string; sizes: StockByVariant[] }>)
+              ).map(([colorId, group]) => (
+                <div key={colorId} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    {group.colorImage ? (
+                      <img src={group.colorImage} alt={group.colorName} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: group.colorHex || '#ccc', border: '1px solid #d1d5db', flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{group.colorName}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {group.sizes.map(variant => (
+                      <button
+                        key={`${variant.id || `${variant.colorId}-${variant.sizeId}`}`}
+                        onClick={() => {
+                          addToCart(variantPicker.product, {
+                            colorId: variant.colorId,
+                            colorName: variant.colorName,
+                            colorHex: variant.colorHex,
+                            sizeId: variant.sizeId,
+                            sizeName: variant.sizeName,
+                            stock: variant.stock,
+                            precio: variant.precio,
+                          })
+                          setVariantPicker(null)
+                          toast(`${variantPicker.product.name} añadido`)
+                        }}
+                        disabled={variant.stock <= 0}
+                        style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          padding: '8px 14px', borderRadius: 10,
+                          border: variant.stock > 0 ? '1px solid #22c55e' : '1px solid #e5e7eb',
+                          background: variant.stock > 0 ? '#f0fdf4' : '#f9fafb',
+                          cursor: variant.stock > 0 ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.borderColor = '#16a34a' } }}
+                        onMouseLeave={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#22c55e' } }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 600, color: variant.stock > 0 ? '#059669' : '#9ca3af' }}>
+                          {variant.sizeName || 'Único'}
+                        </span>
+                        <span style={{ fontSize: 11, color: variant.stock > 0 ? '#6b7280' : '#d1d5db' }}>
+                          Stock: {variant.stock}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>
+                          ${(variant.precio || variantPicker.product.price).toFixed(2)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -554,7 +790,7 @@ export default function Tienda() {
                       <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',color: 'var(--rose-md)'}}><PackageIcon /></div>
                     )}
                     <div className="v-detail-image-overlay">
-                      <div className="v-detail-badges">{(detalle.en_liquidacion || detalle.estado_catalogo) && <span className="v-detail-badge v-detail-badge-primary">{detalle.en_liquidacion ? 'Oferta' : detalle.estado_catalogo}</span>}<span className="v-detail-badge v-detail-badge-secondary">{detalle.modelo}</span></div>
+                      <div className="v-detail-badges">{(detalle.en_liquidacion || detalle.estado_catalogo) && <span className="v-detail-badge v-detail-badge-primary">{detalle.en_liquidacion ? 'Oferta' : detalle.estado_catalogo}</span>}<span className="v-detail-badge v-detail-badge-secondary">{modelosMap[detalle.modelo] || 'Modelo'}</span></div>
                       <h2 className="v-detail-name">{detalle.name}</h2>
                       <p className="v-detail-code">Código: {detalle.codigo || 'N/A'}</p>
                       <p className="v-detail-desc">{detalle.description?.slice(0, 100)}...</p>
@@ -591,6 +827,11 @@ export default function Tienda() {
                       {detalle.stockByVariants.find(v => v.colorId === selectedColor)?.colorName}
                     </p>
                   )}
+                  {!selectedColor && (
+                    <p style={{ fontSize: 12, color: '#22c55e', marginTop: 8, fontStyle: 'italic' }}>
+                      Seleccione un color y una talla
+                    </p>
+                  )}
                 </div>
               )}
               
@@ -608,11 +849,11 @@ export default function Tienda() {
                             key={v.sizeId}
                             onClick={() => hasStock && setSelectedSize(v.sizeId)}
                             disabled={!hasStock}
-                            className="v-detail-size-btn"
+                            className={isSelected ? "v-detail-size-btn v-detail-size-btn-selected" : "v-detail-size-btn"}
                             style={{
-                              border: isSelected ? '2px solid var(--charcoal)' : '1px solid #ddd',
-                              background: isSelected ? 'var(--charcoal)' : hasStock ? '#fff' : '#f5f5f5',
-                              color: isSelected ? '#fff' : hasStock ? 'var(--charcoal)' : '#ccc',
+                              border: isSelected ? '2px solid #22c55e' : '1px solid #ddd',
+                              background: isSelected ? '#22c55e' : hasStock ? '#fff' : '#f5f5f5',
+                              color: isSelected ? '#000' : hasStock ? 'var(--charcoal)' : '#ccc',
                               cursor: hasStock ? "pointer" : "not-allowed",
                             }}
                           >
@@ -622,6 +863,11 @@ export default function Tienda() {
                       })}
                   </div>
                 </div>
+              )}
+              {selectedColor && !selectedSize && detalle.stockByVariants?.some(v => v.colorId === selectedColor && v.stock > 0) && (
+                <p style={{ fontSize: 12, color: '#22c55e', marginBottom: 12, fontStyle: 'italic' }}>
+                  Seleccione una talla para agregar al carrito
+                </p>
               )}
               
               {(() => {
@@ -684,8 +930,8 @@ export default function Tienda() {
         </div>
       )}
 
-      {consultaOpen && cart.length > 0 && <ReservaModal cart={cart} onClose={() => setConsultaOpen(false)} onSuccess={() => { setCart([]); setConsultaOpen(false); }} mode="consulta" />}
-      {reservaOpen && cart.length > 0 && <ReservaModal cart={cart} onClose={() => setReservaOpen(false)} onSuccess={() => { setCart([]); setReservaOpen(false) }} mode="reserva" reservaTipo={reservaTipo} />}
+      {consultaOpen && cart.length > 0 && <ReservaModal cart={cart} onClose={() => setConsultaOpen(false)} onSuccess={() => { setCart([]); setConsultaOpen(false); }} mode="consulta" promoResult={promoResult} />}
+      {reservaOpen && cart.length > 0 && <ReservaModal cart={cart} onClose={() => setReservaOpen(false)} onSuccess={() => { setCart([]); setReservaOpen(false) }} mode="reserva" reservaTipo={reservaTipo} promoResult={promoResult} />}
       
       {authOpen && (
         <AuthModal 
@@ -700,6 +946,9 @@ export default function Tienda() {
       {misReservasOpen && (
         <MisReservas onClose={() => setMisReservasOpen(false)} />
       )}
+      </div>
     </div>
   );
 }
+
+

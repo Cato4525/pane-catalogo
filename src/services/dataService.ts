@@ -48,7 +48,21 @@ export const dataService = {
     console.log("Consultando ventas en direct_sales");
     const { data, error } = await supabase.from('direct_sales').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((p: any) => ({
+
+    const sales = (data || []) as any[];
+    const saleIds = sales.map(s => s.id)
+    const itemsBySaleId: Record<string, any[]> = {}
+    if (saleIds.length > 0) {
+      const { data: itemsData } = await supabase.from('sales_items').select('*').in('sale_id', saleIds)
+      if (itemsData) {
+        for (const item of itemsData) {
+          if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = []
+          itemsBySaleId[item.sale_id].push(item)
+        }
+      }
+    }
+
+    return sales.map((p: any) => ({
       id: p.codigo,
       cliente: p.cliente,
       clienteId: p.cliente_id,
@@ -57,6 +71,7 @@ export const dataService = {
       direccion: p.direccion || '',
       ciudad: p.ciudad || '',
       items: p.items || [],
+      saleItems: itemsBySaleId[p.id] || [],
       monto: p.monto,
       estado: p.estado,
       fecha: p.fecha,
@@ -68,6 +83,10 @@ export const dataService = {
       tarjeta_last4: p.tarjeta_last4,
       tarjeta_autori: p.tarjeta_autori,
       factura_generada: p.factura_generada,
+      subtotal: p.subtotal || 0,
+      descuento_total: p.descuento_total || 0,
+      envio: p.envio || 0,
+      promociones_aplicadas: p.promociones_aplicadas || [],
     })) as DirectSale[];
   },
 
@@ -94,8 +113,37 @@ export const dataService = {
       factura_generada: sale.factura_generada || false,
       notas: sale.notas || '',
       fecha: sale.fecha,
+      subtotal: sale.subtotal || 0,
+      descuento_total: sale.descuento_total || 0,
+      envio: sale.envio || 0,
+      promociones_aplicadas: sale.promociones_aplicadas || [],
     }).select().single();
     if (error) throw error;
+
+    if (sale.items.length > 0) {
+      const promoMap = new Map<string, { id: string; name: string }>()
+      if (sale.promociones_aplicadas) {
+        for (const p of sale.promociones_aplicadas) {
+          promoMap.set(p.campania_id, { id: p.campania_id, name: p.campania_nombre })
+        }
+      }
+      const itemsData = sale.items.map((item) => ({
+        sale_id: data.id,
+        product_id: item.productId,
+        product_name: item.productName,
+        product_code: item.productCode || '',
+        quantity: item.quantity,
+        price: item.price,
+        precio_original: item.price,
+        precio_final: item.price,
+        descuento_aplicado: 0,
+        promocion_id: promoMap.size > 0 ? Array.from(promoMap.values())[0].id : null,
+        promocion_nombre: promoMap.size > 0 ? Array.from(promoMap.values())[0].name : null,
+      }))
+      const { error: itemsError } = await supabase.from('sales_items').insert(itemsData)
+      if (itemsError) console.warn('Error guardando sales_items:', itemsError)
+    }
+
     return {
       id: data.codigo,
       cliente: data.cliente,
@@ -133,8 +181,15 @@ export const dataService = {
 
   async deleteDirectSale(id: string): Promise<void> {
     if (!checkConfigured()) throw new Error('Supabase no configurado');
-    const { error } = await supabase.from('direct_sales').delete().eq('codigo', id);
-    if (error) throw error;
+    const { data: sale } = await supabase.from('direct_sales').select('id').eq('codigo', id).maybeSingle()
+    if (sale) {
+      await supabase.from('sales_items').delete().eq('sale_id', sale.id)
+      const { error } = await supabase.from('direct_sales').delete().eq('id', sale.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('direct_sales').delete().eq('codigo', id)
+      if (error) throw error
+    }
   },
 
   // ========== CLIENTS ==========
@@ -267,6 +322,7 @@ export const dataService = {
         producto_nombre: item.producto_nombre || item.name || '',
         cantidad: item.cantidad || item.qty || 1,
         precio_unitario: item.precio_unitario || item.price || 0,
+        product_variant_id: item.variantId || null,
       }))
       const { error: itemsError } = await supabase.from('reservation_items').insert(itemsData)
       if (itemsError) console.warn('Error insertando items:', itemsError)

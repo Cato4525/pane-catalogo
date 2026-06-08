@@ -16,6 +16,7 @@ export interface ColorTallaStock {
   colorName: string;
   colorHex: string;
   image?: string;
+  color_tipo?: string;
   tallas: {
     sizeId: string;
     sizeName: string;
@@ -39,6 +40,7 @@ const emptyForm: Partial<Product> = {
   status: 'active',
   modelo: '',
   color: '',
+  color_tipo: '',
 }
 
 export default function ProductsPage() {
@@ -88,6 +90,7 @@ export default function ProductsPage() {
   const [selectedSizes, setSelectedSizes] = useState<string[]>([])
   const [selectedColors, setSelectedColors] = useState<string[]>([])
   const [colorTallaStock, setColorTallaStock] = useState<ColorTallaStock[]>([])
+  const [enabledSizesByColor, setEnabledSizesByColor] = useState<Record<string, string[]>>({})
   const [activeColorIndex, setActiveColorIndex] = useState<number>(0)
   const [imageFiles, setImageFiles] = useState<ImageFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -126,6 +129,7 @@ export default function ProductsPage() {
             colorName: v.colorName,
             colorHex: v.colorHex,
             image: v.colorImage,
+            color_tipo: v.color_tipo || '',
             tallas: []
           }
         }
@@ -137,9 +141,15 @@ export default function ProductsPage() {
         })
       }
       setColorTallaStock(Object.values(colorMap))
+      const enabledSizes: Record<string, string[]> = {}
+      for (const [colorId, colorData] of Object.entries(colorMap)) {
+        enabledSizes[colorId] = colorData.tallas.map(t => t.sizeId)
+      }
+      setEnabledSizesByColor(enabledSizes)
       setActiveColorIndex(0)
     } else {
       setColorTallaStock([])
+      setEnabledSizesByColor({})
       setActiveColorIndex(0)
     }
     
@@ -195,10 +205,14 @@ export default function ProductsPage() {
     setIsUploading(true);
     setUploadError(null);
 
+    console.log('formData.color_tipo:', formData.color_tipo, 'type:', typeof formData.color_tipo)
+
     try {
       const stockByVariants: StockByVariant[] = []
       for (const colorData of colorTallaStock) {
+        const enabledIds = enabledSizesByColor[colorData.colorId] || colorData.tallas.map(t => t.sizeId)
         for (const talla of colorData.tallas) {
+          if (!enabledIds.includes(talla.sizeId)) continue
           stockByVariants.push({
             colorId: colorData.colorId,
             colorName: colorData.colorName,
@@ -207,7 +221,8 @@ export default function ProductsPage() {
             sizeId: talla.sizeId,
             sizeName: talla.sizeName,
             stock: talla.stock,
-            precio: talla.precio
+            precio: talla.precio,
+            color_tipo: colorData.color_tipo || '',
           })
         }
       }
@@ -221,8 +236,16 @@ export default function ProductsPage() {
         stockByVariants,
       };
 
+      console.log('productData.color_tipo:', productData.color_tipo)
+      console.log('Datos enviados a guardar:', {
+        nombre: productData.name,
+        color: productData.color,
+        color_tipo: productData.color_tipo,
+      })
+
       if (selectedProduct) {
-        updateProduct(selectedProduct.id, productData);
+        await updateProduct(selectedProduct.id, productData);
+        console.log('UPDATE completado. color_tipo enviado:', productData.color_tipo)
       } else {
         const newProduct: Product = {
           ...(productData as Product),
@@ -230,7 +253,8 @@ export default function ProductsPage() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
-        addProduct(newProduct);
+        await addProduct(newProduct);
+        console.log('CREATE completado. color_tipo enviado:', newProduct.color_tipo)
       }
       
       setImageFiles([]);
@@ -261,11 +285,18 @@ export default function ProductsPage() {
     if (selectedColors.includes(colorName)) {
       setSelectedColors(prev => prev.filter(c => c !== colorName))
       setColorTallaStock(prev => prev.filter(c => c.colorId !== color.id))
+      setEnabledSizesByColor(prev => {
+        const next = { ...prev }
+        delete next[color.id]
+        return next
+      })
     } else {
+      const allSizeIds = activeTallas.map(t => t.id)
       const newColorData: ColorTallaStock = {
         colorId: color.id,
         colorName: color.nombre,
         colorHex: color.codigo_hex || '#000',
+        color_tipo: formData.color_tipo || '',
         tallas: activeTallas.map(t => ({
           sizeId: t.id,
           sizeName: t.nombre,
@@ -275,6 +306,7 @@ export default function ProductsPage() {
       }
       setSelectedColors(prev => [...prev, colorName])
       setColorTallaStock(prev => [...prev, newColorData])
+      setEnabledSizesByColor(prev => ({ ...prev, [color.id]: allSizeIds }))
       setActiveColorIndex(colorTallaStock.length)
     }
   }
@@ -295,6 +327,20 @@ export default function ProductsPage() {
     }
   }
 
+  const toggleTallabyColor = (colorId: string, sizeId: string) => {
+    setEnabledSizesByColor(prev => {
+      const current = prev[colorId] || []
+      const enabled = current.includes(sizeId)
+        ? current.filter(id => id !== sizeId)
+        : [...current, sizeId]
+      return { ...prev, [colorId]: enabled }
+    })
+  }
+
+  const isSizeEnabledForColor = (colorId: string, sizeId: string) => {
+    return (enabledSizesByColor[colorId] || []).includes(sizeId)
+  }
+
   const updateColorTallaStock = (colorId: string, sizeId: string, field: 'stock' | 'precio', value: number) => {
     setColorTallaStock(prev => prev.map(colorData => {
       if (colorData.colorId === colorId) {
@@ -309,25 +355,34 @@ export default function ProductsPage() {
     }))
   }
 
+  const tallasVisibles = (colorId: string) => {
+    return enabledSizesByColor[colorId] || []
+  }
+
+  const tallasFiltradas = (colorData: ColorTallaStock) => {
+    const enabled = tallasVisibles(colorData.colorId)
+    return colorData.tallas.filter(t => enabled.includes(t.sizeId))
+  }
+
   const getTotalStock = () => colorTallaStock.reduce((sum, c) => 
-    sum + c.tallas.reduce((s, t) => s + t.stock, 0), 0
+    sum + tallasFiltradas(c).reduce((s, t) => s + t.stock, 0), 0
   )
 
   const getPrecioPromedio = () => {
-    const allPrices = colorTallaStock.flatMap(c => c.tallas.map(t => t.precio))
+    const allPrices = colorTallaStock.flatMap(c => tallasFiltradas(c).map(t => t.precio))
     if (allPrices.length === 0) return 0
     return allPrices.reduce((s, p) => s + p, 0) / allPrices.length
   }
 
   const getTotalInventoryValue = () => {
     return colorTallaStock.reduce((sum, c) => 
-      sum + c.tallas.reduce((s, t) => s + (t.stock * t.precio), 0), 0
+      sum + tallasFiltradas(c).reduce((s, t) => s + (t.stock * t.precio), 0), 0
     )
   }
 
   const exportToExcel = () => {
     const data = colorTallaStock.flatMap(color => 
-      color.tallas.map(talla => ({
+      tallasFiltradas(color).map(talla => ({
         Producto: formData.name,
         Codigo: formData.codigo,
         Categoria: activeCategories.find(c => c.id === formData.category)?.name || '',
@@ -610,6 +665,23 @@ export default function ProductsPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="label">Tipo de Color</label>
+              <select
+                value={formData.color_tipo || ''}
+                onChange={(e) => setFormData({ ...formData, color_tipo: e.target.value })}
+                className="input"
+                disabled={isUploading}
+              >
+                <option value="">Seleccionar</option>
+                <option value="oscuro">Oscuro</option>
+                <option value="claro">Claro</option>
+                <option value="color">Color</option>
+                <option value="negro">Negro</option>
+                <option value="blanco">Blanco</option>
+                <option value="neutro">Neutro</option>
+              </select>
+            </div>
           </div>
 
           <div className="p-4 rounded-lg" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
@@ -730,6 +802,30 @@ export default function ProductsPage() {
                                   {colorTallaStock[activeColorIndex].tallas.length} tallas
                                 </span>
                               </div>
+                              <select
+                                value={colorTallaStock[activeColorIndex]?.color_tipo || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  setColorTallaStock(prev => prev.map((c, idx) =>
+                                    idx === activeColorIndex ? { ...c, color_tipo: val } : c
+                                  ))
+                                }}
+                                className="input"
+                                style={{ width: 140, padding: '6px 8px', fontSize: 12, marginLeft: 12 }}
+                              >
+                                <option value="">Sin tipo</option>
+                                <option value="oscuro">Oscuro</option>
+                                <option value="claro">Claro</option>
+                                <option value="color">Color</option>
+                                <option value="negro">Negro</option>
+                                <option value="blanco">Blanco</option>
+                                <option value="neutro">Neutro</option>
+                                <option value="exclusivo">Exclusivo</option>
+                                <option value="premium">Premium</option>
+                                <option value="temporada">Temporada</option>
+                                <option value="navidad">Navidad</option>
+                                <option value="black_friday">Black Friday</option>
+                              </select>
                             </div>
                             <div className="text-right">
                               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Stock: {colorTallaStock[activeColorIndex].tallas.reduce((s, t) => s + t.stock, 0)}</span>
@@ -794,6 +890,34 @@ export default function ProductsPage() {
                             </div>
                           </div>
 
+                          <div className="mb-4">
+                            <label className="label">Tallas disponibles para este color</label>
+                            <div className="flex flex-wrap gap-2">
+                              {activeTallas.map((t) => {
+                                const enabled = isSizeEnabledForColor(colorTallaStock[activeColorIndex].colorId, t.id)
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => toggleTallabyColor(colorTallaStock[activeColorIndex].colorId, t.id)}
+                                    className="px-3 py-1.5 rounded-lg text-sm transition-all"
+                                    style={{
+                                      backgroundColor: enabled ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.15)',
+                                      color: enabled ? '#22c55e' : 'var(--text-muted)',
+                                      border: enabled ? '2px solid #22c55e' : '2px solid transparent',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {t.nombre}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                              {colorTallaStock[activeColorIndex].colorName} tendr&aacute; {tallasFiltradas(colorTallaStock[activeColorIndex]).length} talla(s)
+                            </p>
+                          </div>
+
                           <table className="w-full text-sm">
                             <thead>
                               <tr style={{ borderBottom: '2px solid var(--border)' }}>
@@ -804,7 +928,7 @@ export default function ProductsPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {colorTallaStock[activeColorIndex].tallas.map(talla => (
+                              {tallasFiltradas(colorTallaStock[activeColorIndex]).map(talla => (
                                 <tr key={talla.sizeId} style={{ borderBottom: '1px solid var(--border)' }}>
                                   <td className="py-3 px-2">
                                     <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'rgba(100,116,139,0.2)' }}>

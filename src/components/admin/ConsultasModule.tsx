@@ -70,7 +70,7 @@ export default function ConsultasModule({ themeColors, isEjecutivo }: ConsultasM
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h3 style={{ fontSize: 18, fontWeight: 700, color: tc.text }}>Consultas de Productos</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['todos', 'whatsapp', 'tienda'].map(origen => (
+          {['todos', 'whatsapp', 'tienda', 'promocion'].map(origen => (
             <button
               key={origen}
               onClick={() => setFiltroOrigen(origen)}
@@ -129,6 +129,10 @@ export default function ConsultasModule({ themeColors, isEjecutivo }: ConsultasM
             <div style={{ background: tc.background, borderRadius: 12, padding: 16, textAlign: 'center' }}>
               <p style={{ fontSize: 24, fontWeight: 700, color: '#22d3ee', margin: 0 }}>{consultasFiltradas.filter(c => c.origen === 'tienda').length}</p>
               <p style={{ fontSize: 10, color: tc.textMuted, margin: '4px 0 0' }}>Tienda</p>
+            </div>
+            <div style={{ background: tc.background, borderRadius: 12, padding: 16, textAlign: 'center' }}>
+              <p style={{ fontSize: 24, fontWeight: 700, color: '#a855f7', margin: 0 }}>{consultasFiltradas.filter(c => c.origen === 'promocion').length}</p>
+              <p style={{ fontSize: 10, color: tc.textMuted, margin: '4px 0 0' }}>Promoción</p>
             </div>
             <div style={{ background: tc.background, borderRadius: 12, padding: 16, textAlign: 'center' }}>
               <p style={{ fontSize: 24, fontWeight: 700, color: tc.primary, margin: 0 }}>{topProductos.length}</p>

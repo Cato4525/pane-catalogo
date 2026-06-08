@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store'
 import { useAuthStore } from '../../store/authStore'
 import { dataService } from '../../services/dataService'
-import { Reserva, ConsultaProducto, Product } from '../../types'
+import { Reserva, ConsultaProducto, Product, PromocionAplicada } from '../../types'
 
 interface CartItem extends Product {
   qty: number
@@ -14,11 +14,19 @@ interface ReservaModalProps {
   onSuccess?: () => void
   mode: 'consulta' | 'reserva'
   reservaTipo?: 'con_abono'
+  promoResult?: {
+    subtotal: number
+    totalDiscount: number
+    envio: number
+    envioGratis: boolean
+    total: number
+    promocionesAplicadas: PromocionAplicada[]
+  } | null
 }
 
 type Step = 'datos' | 'pago' | 'confirmacion'
 
-export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTipo = 'con_abono' }: ReservaModalProps) {
+export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTipo = 'con_abono', promoResult }: ReservaModalProps) {
   const [step, setStep] = useState<Step>('datos')
   const [loading, setLoading] = useState(false)
   const [imagenRecibo, setImagenRecibo] = useState<File | null>(null)
@@ -43,7 +51,12 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
     envio: '',
   })
   
-  const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0) + (settings?.costo_envio ?? 5)
+  const rawTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0) + (settings?.costo_envio ?? 5)
+  const total = promoResult?.total ?? rawTotal
+  const subtotal = promoResult?.subtotal ?? rawTotal
+  const descuentoTotal = promoResult?.totalDiscount ?? 0
+  const envioGratis = promoResult?.envioGratis ?? false
+  const promocionesAplicadas = promoResult?.promocionesAplicadas ?? []
   const esMayor40 = total >= 40
   
   const abonoMinimo = esMayor40 ? total * 0.2 : 5
@@ -155,7 +168,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
           cliente_telefono: formData.telefono,
           cliente_email: formData.email,
           mensaje: formData.direccion || '',
-        origen: 'store',
+          origen: 'tienda',
           created_at: now.toISOString(),
         }
         
@@ -633,8 +646,27 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
             </div>
 
             <div style={{ marginBottom: 16, padding: 16, background: '#fafaf8', borderRadius: 12, border: '1px solid #e8e4dc' }}>
-              <p style={{ margin: 0, fontSize: 14, color: '#666', textAlign: 'center' }}>Total a pagar:</p>
-              <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' }}>${total.toFixed(2)}</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', marginBottom: 4 }}>
+                <span>Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              {descuentoTotal > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#22c55e', marginBottom: 4 }}>
+                  <span>Descuento</span>
+                  <span>-${descuentoTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {promocionesAplicadas.length > 0 && promocionesAplicadas.map((p, i) => (
+                <div key={i} style={{ fontSize: 10, color: '#22c55e', marginBottom: 2 }}>🏷️ {p.descripcion}</div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', marginBottom: 8 }}>
+                <span>Envío</span>
+                <span>{envioGratis ? <span style={{ color: '#22c55e' }}>GRATIS</span> : `$${(settings?.costo_envio ?? 5).toFixed(2)}`}</span>
+              </div>
+              <div style={{ borderTop: '1px solid #e8e4dc', paddingTop: 8 }}>
+                <p style={{ margin: 0, fontSize: 14, color: '#666', textAlign: 'center' }}>Total a pagar:</p>
+                <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' }}>${total.toFixed(2)}</p>
+              </div>
             </div>
 
             {tieneComprobante ? (

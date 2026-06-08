@@ -218,8 +218,8 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
       const consultasWithProduct = (data || []).map(c => ({
         ...c,
-        producto_nombre: c.producto?.nombre,
-        producto_codigo: c.producto?.codigo,
+        producto_nombre: c.producto?.nombre || c.producto_nombre,
+        producto_codigo: c.producto?.codigo || c.producto_codigo,
       }))
 
       const newConsultas = reset ? consultasWithProduct : [...consultas, ...consultasWithProduct]

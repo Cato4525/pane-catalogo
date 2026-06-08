@@ -57,6 +57,7 @@ const defaultSettings: StoreSettings = {
   shippingFields: defaultShippingFields,
   costo_envio: 5,
   visitas: 0,
+  backgroundImage: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80',
 };
 
 const defaultDirectSales: DirectSale[] = [];
@@ -279,26 +280,27 @@ export const useStore = create<AppState>()(
         const { data: sessionData } = await supabase.auth.getSession()
         console.log('Session:', sessionData?.session ? 'Active' : 'None')
         
-        const productData: Record<string, any> = {
-          codigo: product.codigo || null,
-          nombre: product.name || 'Sin nombre',
-          descripcion: product.description || null,
-          precio: product.price || 0,
-          stock: product.stock || 0,
-          stock_minimo: 0,
-          colores: product.colors || [],
-          tallas: product.sizes || [],
-          imagenes: product.images || [],
-          estado_catalogo: product.estado_catalogo || 'clasico',
-          tipo_catalogo: product.tipo_catalogo || 'permanente',
-          coleccion: product.coleccion || '',
-          activo: product.status !== 'inactive',
-          en_liquidacion: product.en_liquidacion || false,
-          precio_liquidacion: product.precio_liquidacion || null,
-          slug: product.name?.toLowerCase().replace(/\s+/g, '-') || `product-${Date.now()}`,
-          meta_titulo: product.name || null,
-          meta_descripcion: product.description || null,
-        }
+const productData: Record<string, any> = {
+  codigo: product.codigo || null,
+  nombre: product.name || 'Sin nombre',
+  descripcion: product.description || null,
+  precio: product.price || 0,
+  stock: product.stock || 0,
+  stock_minimo: 0,
+  colores: product.colors || [],
+  tallas: product.sizes || [],
+  imagenes: product.images || [],
+  estado_catalogo: product.estado_catalogo || 'clasico',
+  tipo_catalogo: product.tipo_catalogo || 'permanente',
+  coleccion: product.coleccion || '',
+  activo: product.status !== 'inactive',
+  en_liquidacion: product.en_liquidacion || false,
+  precio_liquidacion: product.precio_liquidacion || null,
+  slug: product.name?.toLowerCase().replace(/\s+/g, '-') || `product-${Date.now()}`,
+  meta_titulo: product.name || null,
+  meta_descripcion: product.description || null,
+  promotion_category: product.promotion_category || '',
+}
         
         // Calcular stock total y precio desde variantes
         const totalStock = product.stockByVariants?.reduce((sum, v) => sum + v.stock, 0) || product.stock || 0
@@ -317,10 +319,16 @@ export const useStore = create<AppState>()(
         }
         
         console.log('Sending to Supabase:', productData)
+        console.log('color_tipo value:', JSON.stringify(productData.color_tipo), 'type:', typeof productData.color_tipo)
         
         const { data, error, status } = await supabase.from('products').insert(productData).select().single()
         
         console.log('Supabase response - status:', status, 'data:', data, 'error:', error)
+        
+        if (data) {
+          console.log('color_tipo RETORNADO de Supabase:', JSON.stringify(data.color_tipo), 'type:', typeof data.color_tipo)
+          console.log('¿Coincide?', data.color_tipo === productData.color_tipo ? 'SÍ ✅' : 'NO ❌')
+        }
         
         if (error) {
           console.error('Error guardando en Supabase:', error.code, error.message, error.details)
@@ -347,6 +355,8 @@ export const useStore = create<AppState>()(
             activo: data.activo,
             en_liquidacion: data.en_liquidacion,
             precio_liquidacion: data.precio_liquidacion,
+            promotion_category: data.promotion_category || product.promotion_category || '',
+            color_tipo: product.color_tipo || '',
             created_at: data.created_at,
             updated_at: data.updated_at,
             stockByVariants: product.stockByVariants || [],
@@ -364,7 +374,8 @@ export const useStore = create<AppState>()(
                 stock: variant.stock,
                 precio: variant.precio || 0,
                 color_image: variant.colorImage || null,
-                sku: sku
+                sku: sku,
+                color_tipo: variant.color_tipo || '',
               })
             }
           }
@@ -389,28 +400,35 @@ export const useStore = create<AppState>()(
     const precioBase = precios.length > 0 ? Math.max(...precios) : (productUpdate.price || 0)
     
     if (supabase) {
-      const { error } = await supabase.from('products').update({
-        codigo: productUpdate.codigo,
-        nombre: productUpdate.name,
-        descripcion: productUpdate.description,
-        precio: precioBase,
-        stock: totalStock,
-        category_id: productUpdate.category,
-        model_id: productUpdate.modelo,
-        colores: productUpdate.colors,
-        tallas: productUpdate.sizes,
-        imagenes: productUpdate.images,
-        estado_catalogo: productUpdate.estado_catalogo,
-        tipo_catalogo: productUpdate.tipo_catalogo,
-        coleccion: productUpdate.coleccion,
-        activo: productUpdate.status === 'inactive' ? false : true,
-        en_liquidacion: productUpdate.en_liquidacion,
-        precio_liquidacion: productUpdate.precio_liquidacion,
-        updated_at: new Date().toISOString(),
-      }).eq('id', id)
+console.log('[updateProduct] color_tipo a enviar:', JSON.stringify(productUpdate.color_tipo), 'type:', typeof productUpdate.color_tipo)
+
+const { error, data } = await supabase.from('products').update({
+  codigo: productUpdate.codigo,
+  nombre: productUpdate.name,
+  descripcion: productUpdate.description,
+  precio: precioBase,
+  stock: totalStock,
+  category_id: productUpdate.category,
+  model_id: productUpdate.modelo,
+  colores: productUpdate.colors,
+  tallas: productUpdate.sizes,
+  imagenes: productUpdate.images,
+  estado_catalogo: productUpdate.estado_catalogo,
+  tipo_catalogo: productUpdate.tipo_catalogo,
+  coleccion: productUpdate.coleccion,
+  activo: productUpdate.status === 'inactive' ? false : true,
+  en_liquidacion: productUpdate.en_liquidacion,
+  precio_liquidacion: productUpdate.precio_liquidacion,
+  promotion_category: productUpdate.promotion_category || '',
+  updated_at: new Date().toISOString(),
+}).eq('id', id).select().single()
       if (error) {
-        console.error('Error actualizando en Supabase:', error)
+        console.error('Error actualizando en Supabase:', error.code, error.message, error.details)
         return
+      }
+      if (data) {
+        console.log('[updateProduct] color_tipo RETORNADO:', JSON.stringify(data.color_tipo), 'type:', typeof data.color_tipo)
+        console.log('[updateProduct] ¿Coincide?', data.color_tipo === productUpdate.color_tipo ? 'SÍ ✅' : 'NO ❌')
       }
       
       // Actualizar stock por variante
@@ -428,14 +446,15 @@ export const useStore = create<AppState>()(
             stock: variant.stock,
             precio: variant.precio || 0,
             color_image: variant.colorImage || null,
-            sku: sku
+            sku: sku,
+            color_tipo: variant.color_tipo || '',
           })
         }
       }
     }
     set((state) => ({
       products: state.products.map((p) => 
-        p.id === id ? { ...p, ...productUpdate, stock: totalStock, updated_at: new Date().toISOString() } : p
+        p.id === id ? { ...p, ...productUpdate, stock: totalStock, price: precioBase, updated_at: new Date().toISOString() } : p
       )
     }))
   },
@@ -491,7 +510,7 @@ export const useStore = create<AppState>()(
       const productsWithVariants = await Promise.all(data.map(async (p) => {
         const { data: variantsData } = await supabase
           .from('product_variants')
-          .select('*, colors(nombre, codigo_hex), sizes(nombre)')
+          .select('id, product_id, color_id, size_id, stock, precio, color_image, sku, color_tipo, colors(nombre, codigo_hex), sizes(nombre)')
           .eq('product_id', p.id)
         
         const stockByVariants: any[] = []
@@ -506,7 +525,8 @@ export const useStore = create<AppState>()(
               sizeId: variant.size_id,
               sizeName: variant.sizes?.nombre || '',
               stock: variant.stock || 0,
-              precio: variant.precio || 0
+              precio: variant.precio || 0,
+              color_tipo: variant.color_tipo || '',
             })
           }
         }
@@ -520,6 +540,7 @@ export const useStore = create<AppState>()(
         const priceFromVariants = precios.length > 0 ? Math.max(...precios) : 0
         const finalPrice = priceFromVariants > 0 ? priceFromVariants : (p.precio || 0)
         
+        const tiposFromVariants = [...new Set((p.stockByVariants || []).map((v: any) => v.color_tipo).filter(Boolean))]
         return {
           id: p.id,
           name: p.nombre,
@@ -540,6 +561,8 @@ export const useStore = create<AppState>()(
           activo: p.activo,
           en_liquidacion: p.en_liquidacion,
           precio_liquidacion: p.precio_liquidacion,
+          promotion_category: p.promotion_category || '',
+          color_tipo: p.color_tipo || tiposFromVariants.join(',') || '',
           created_at: p.created_at,
           updated_at: p.updated_at,
           fecha_creacion: p.created_at,
@@ -584,11 +607,7 @@ export const useStore = create<AppState>()(
         created_at: c.created_at,
       }))
       
-      set((state) => {
-        const existingIds = new Set(state.categories.map(c => c.id))
-        const newCategories = mappedCategories.filter(c => !existingIds.has(c.id))
-        return { categories: [...state.categories, ...newCategories] }
-      })
+      set({ categories: mappedCategories })
     }
   },
 
@@ -607,14 +626,20 @@ export const useStore = create<AppState>()(
     }
     
     if (data) {
-      const mappedModels: Modelo[] = data.map((m) => ({
-        id: m.id,
-        nombre: m.nombre,
-        descripcion: m.descripcion,
-        status: m.activo ? 'active' : 'inactive',
-        created_at: m.created_at,
-      }))
-      set({ modelos: mappedModels })
+      const seen = new Map<string, Modelo>()
+      data.forEach((m) => {
+        const nombre = m.nombre?.toLowerCase().trim()
+        if (nombre && !seen.has(nombre)) {
+          seen.set(nombre, {
+            id: m.id,
+            nombre: m.nombre,
+            descripcion: m.descripcion,
+            status: m.activo ? 'active' : 'inactive',
+            created_at: m.created_at,
+          })
+        }
+      })
+      set({ modelos: Array.from(seen.values()) })
     }
   },
 
@@ -666,14 +691,20 @@ export const useStore = create<AppState>()(
     }
     
     if (data) {
-      const mappedTallas: Talla[] = data.map((s) => ({
-        id: s.id,
-        nombre: s.nombre,
-        orden: s.orden,
-        status: s.activo ? 'active' : 'inactive',
-        created_at: s.created_at,
-      }))
-      set({ tallas: mappedTallas })
+      const seen = new Map<string, Talla>()
+      data.forEach((s) => {
+        const nombre = s.nombre?.toLowerCase().trim()
+        if (nombre && !seen.has(nombre)) {
+          seen.set(nombre, {
+            id: s.id,
+            nombre: s.nombre,
+            orden: s.orden,
+            status: s.activo ? 'active' : 'inactive',
+            created_at: s.created_at,
+          })
+        }
+      })
+      set({ tallas: Array.from(seen.values()) })
     }
   },
 
@@ -983,11 +1014,16 @@ export const useStore = create<AppState>()(
         fecha: sale.fecha,
         user_id,
         usuario_nombre,
+        subtotal: sale.subtotal || 0,
+        descuento_total: sale.descuento_total || 0,
+        envio: sale.envio || 0,
+        promociones_aplicadas: sale.promociones_aplicadas || [],
       }).select().single();
       if (error) {
         console.error('Error guardando en direct_sales:', error);
       } else {
         console.log('Venta guardada en direct_sales:', data);
+        // sales_items se sincroniza automáticamente vía trigger sync_direct_sales_items
       }
     } catch (err) {
       console.error('Exception guardando venta directa:', err);
@@ -1027,8 +1063,15 @@ export const useStore = create<AppState>()(
     if (!sb) return;
 
     try {
-      const { error } = await sb.from('direct_sales').delete().eq('codigo', id);
-      if (error) console.error('Error eliminando de direct_sales:', error);
+      const { data: sale } = await sb.from('direct_sales').select('id').eq('codigo', id).maybeSingle()
+      if (sale) {
+        await sb.from('sales_items').delete().eq('sale_id', sale.id)
+        const { error } = await sb.from('direct_sales').delete().eq('id', sale.id)
+        if (error) console.error('Error eliminando de direct_sales:', error);
+      } else {
+        const { error } = await sb.from('direct_sales').delete().eq('codigo', id);
+        if (error) console.error('Error eliminando de direct_sales:', error);
+      }
     } catch (err) {
       console.error('Exception eliminando venta:', err);
     }
@@ -1050,6 +1093,20 @@ export const useStore = create<AppState>()(
     }
 
     if (data && data.length > 0) {
+      const saleIds = data.map(p => p.id)
+      const { data: itemsData } = await sb
+        .from('sales_items')
+        .select('*')
+        .in('sale_id', saleIds)
+
+      const itemsBySaleId: Record<string, any[]> = {}
+      if (itemsData) {
+        for (const item of itemsData) {
+          if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = []
+          itemsBySaleId[item.sale_id].push(item)
+        }
+      }
+
       const mapped: DirectSale[] = data.map((p: any) => ({
         id: p.codigo,
         cliente: p.cliente,
@@ -1059,6 +1116,7 @@ export const useStore = create<AppState>()(
         direccion: p.direccion || '',
         ciudad: p.ciudad || '',
         items: p.items || [],
+        saleItems: itemsBySaleId[p.id] || [],
         monto: p.monto,
         estado: p.estado,
         fecha: p.fecha,
@@ -1070,6 +1128,10 @@ export const useStore = create<AppState>()(
         tarjeta_autori: p.tarjeta_autori,
         factura_generada: p.factura_generada,
         notas: p.notas,
+        subtotal: p.subtotal || 0,
+        descuento_total: p.descuento_total || 0,
+        envio: p.envio || 0,
+        promociones_aplicadas: p.promociones_aplicadas || [],
       }));
       set((state) => {
         const existingIds = new Set(state.directSales.map(s => s.id));

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../../store';
 import { THEME_PRESETS, ThemeType, Color, Talla, Modelo, Catalogo, EstadoCatalogo, TipoCatalogo, SocialNetwork } from '../../../../types';
+import './SettingsPage.css';
 
 function Card({ children, style, themeColors }: { children: React.ReactNode; style?: React.CSSProperties; themeColors: typeof THEME_PRESETS.moderno }) {
   return <div style={{ background: `linear-gradient(135deg,${themeColors.surface} 0%,${themeColors.background} 100%)`, border: `1px solid ${themeColors.border}`, borderRadius: 16, padding: 20, ...style }}>{children}</div>;
@@ -101,6 +102,8 @@ export default function SettingsPage() {
   const [costoEnvio, setCostoEnvio] = useState(settings.costo_envio ?? 5);
   const [logo, setLogo] = useState(settings.logo || '');
   const [previewLogo, setPreviewLogo] = useState(settings.logo || '');
+  const [bgImage, setBgImage] = useState(settings.backgroundImage || '');
+  const [previewBg, setPreviewBg] = useState(settings.backgroundImage || '');
   const [logoAlign, setLogoAlign] = useState<'left' | 'center' | 'right'>('left');
   const [storeNameAlign, setStoreNameAlign] = useState<'left' | 'center' | 'right'>('left');
   const [email, setEmail] = useState(settings.contacts?.email || '');
@@ -124,6 +127,7 @@ export default function SettingsPage() {
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [newCategoryImage, setNewCategoryImage] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
   const shippingFormatRef = useRef<HTMLDivElement>(null);
   
   const [newFieldLabel, setNewFieldLabel] = useState('');
@@ -175,6 +179,7 @@ export default function SettingsPage() {
       storeName, 
       storeUrl,
       logo,
+      backgroundImage: bgImage,
       costo_envio: costoEnvio,
       contacts: { 
         ...settings.contacts,
@@ -593,6 +598,19 @@ export default function SettingsPage() {
     }
   };
 
+  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setBgImage(result);
+        setPreviewBg(result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddSocialNetwork = () => {
     if (!newSocialName.trim() || !newSocialLink.trim()) return;
     addSocialNetwork({
@@ -652,7 +670,7 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === 'tienda' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="settings-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <Card themeColors={themeColors}>
             <SHead title="Información de la Tienda" themeColors={themeColors} />
             <div style={{ display: 'grid', gap: 14 }}>
@@ -805,6 +823,101 @@ export default function SettingsPage() {
                 <label style={labelStyle}>TELEGRAM</label>
                 <input value={telegram} onChange={e => setTelegram(e.target.value)} placeholder="@tuusuario" style={inputStyle} />
               </div>
+              <div>
+                <label style={labelStyle}>FONDO DE LA TIENDA</label>
+                <input
+                  type="file"
+                  ref={bgInputRef}
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  onChange={handleBgUpload}
+                  style={{ display: 'none' }}
+                />
+                <div 
+                  onClick={() => bgInputRef.current?.click()}
+                  style={{ 
+                    border: `2px dashed ${themeColors.border}`, 
+                    borderRadius: 12, 
+                    padding: 20, 
+                    textAlign: 'center', 
+                    cursor: 'pointer',
+                    background: themeColors.background,
+                    transition: 'all .2s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    minHeight: 100,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = themeColors.primary;
+                    e.currentTarget.style.background = `${themeColors.primary}08`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = themeColors.border;
+                    e.currentTarget.style.background = themeColors.background;
+                  }}
+                >
+                  {previewBg ? (
+                    <div style={{ position: 'relative' }}>
+                      <img 
+                        src={previewBg} 
+                        alt="Fondo" 
+                        style={{ 
+                          width: '100%', 
+                          maxHeight: 160, 
+                          objectFit: 'cover', 
+                          borderRadius: 8,
+                        }} 
+                        onError={() => setPreviewBg('')} 
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 8,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: themeColors.primary,
+                        color: '#000',
+                        padding: '4px 14px',
+                        borderRadius: 20,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        ✏️ Cambiar fondo
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ 
+                        width: 48, 
+                        height: 48, 
+                        margin: '0 auto 8px',
+                        background: `${themeColors.primary}15`, 
+                        borderRadius: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 24
+                      }}>
+                        🖼️
+                      </div>
+                      <p style={{ margin: 0, fontSize: 13, color: themeColors.text, fontWeight: 500 }}>
+                        Haz clic para subir imagen de fondo
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11, color: themeColors.textMuted }}>
+                        PNG, JPG o WebP • Recomendado 1920×1080px
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: themeColors.textMuted }}>o pega una URL:</span>
+                  <input 
+                    value={bgImage} 
+                    onChange={e => { setBgImage(e.target.value); setPreviewBg(e.target.value); }} 
+                    placeholder="https://ejemplo.com/fondo.jpg" 
+                    style={{ ...inputStyle, flex: 1 }} 
+                  />
+                </div>
+              </div>
               <button onClick={handleSaveStore} style={{ padding: 12, background: isEjecutivo ? '#000000' : `linear-gradient(135deg,${themeColors.primary},${themeColors.secondary})`, border: 'none', borderRadius: 8, color: isEjecutivo ? '#ffffff' : '#000', fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
                 GUARDAR CAMBIOS
               </button>
@@ -944,7 +1057,7 @@ export default function SettingsPage() {
           <Card style={{ marginBottom: 20 }} themeColors={themeColors}>
             <SHead title="Seleccionar Tema" themeColors={themeColors} />
             <p style={{ fontSize: 12, color: themeColors.textMuted, marginBottom: 20 }}>El tema seleccionado se aplicará automáticamente a la tienda y al panel</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+            <div className="settings-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
               {themes.map(theme => (
                 <div key={theme.id} onClick={() => handleSelectTheme(theme.id)} 
                   onMouseEnter={(e) => {
@@ -981,7 +1094,7 @@ export default function SettingsPage() {
           
           <Card themeColors={themeColors}>
             <SHead title="Vista Previa del Tema" themeColors={themeColors} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 20 }}>
+            <div className="settings-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 20 }}>
                 <div style={{ padding: 20, background: themeColors.background, borderRadius: 12, border: `1px solid ${themeColors.border}` }}>
                   <p style={{ margin: '0 0 8px', fontSize: 10, color: themeColors.textMuted }}>TIENDA</p>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: themeColors.text }}>Panel de Productos</h3>
@@ -1074,7 +1187,7 @@ export default function SettingsPage() {
               <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
                 <input value={newCatalogoName} onChange={e => setNewCatalogoName(e.target.value)} placeholder="Nombre del catálogo" style={inputStyle} />
                 <input value={newCatalogoDesc} onChange={e => setNewCatalogoDesc(e.target.value)} placeholder="Descripción" style={inputStyle} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="settings-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <select value={newCatalogoTipo} onChange={e => setNewCatalogoTipo(e.target.value as TipoCatalogo)} style={inputStyle}>
                     <option value="permanente">Permanente</option>
                     <option value="temporada">Temporada</option>
@@ -1168,7 +1281,7 @@ export default function SettingsPage() {
           <p style={{ fontSize: 12, color: themeColors.textMuted, marginBottom: 20 }}>Agrega los enlaces a tus redes sociales que aparecerán en la tienda</p>
           
           <div style={{ display: 'grid', gap: 12, marginBottom: 20, padding: 16, background: themeColors.background, borderRadius: 12, border: `1px solid ${themeColors.border}` }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="settings-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <input value={newSocialName} onChange={e => setNewSocialName(e.target.value)} placeholder="Nombre (ej: Facebook)" style={inputStyle} />
               <input value={newSocialIcon} onChange={e => setNewSocialIcon(e.target.value)} placeholder="Emoji (ej: 📘)" style={inputStyle} />
             </div>
@@ -1204,7 +1317,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'nosotros' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="settings-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <Card themeColors={themeColors}>
             <SHead title="Información de la Empresa" themeColors={themeColors} />
             <div style={{ display: 'grid', gap: 14 }}>

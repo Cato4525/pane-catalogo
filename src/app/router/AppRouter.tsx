@@ -16,6 +16,13 @@ import ReportsPage from '../../modules/admin/reports/pages/ReportsPage'
 import InventoryPage from '../../modules/admin/inventory/pages/InventoryPage'
 import SettingsPage from '../../modules/admin/settings/pages/SettingsPage'
 import UsersPage from '../../modules/admin/users/pages/UsersPage'
+import CatalogosPage from '../../modules/admin/catalogos/pages/CatalogosPage'
+import MarketingCampaignsPage from '../../modules/admin/marketing/pages/CampaignsPage'
+import PromocionesPage from '../../pages/promociones/PromocionesPage'
+import PromocionDetallePage from '../../pages/promociones/PromocionDetallePage'
+import MarketingStorePage from '../../pages/store/marketing/MarketingPage'
+import CampaignDetailPage from '../../pages/store/marketing/CampaignDetailPage'
+import StoreLayout from '../../layouts/StoreLayout'
 import { useAuthStore } from '../../store/authStore'
 
 function AdminRoute() {
@@ -45,6 +52,12 @@ export default function AppRouter() {
     <Routes>
       <Route path="/" element={<Navigate to="/tienda" replace />} />
       <Route path="/tienda" element={<StorePage />} />
+      <Route element={<StoreLayout />}>
+        <Route path="/tienda/promociones" element={<PromocionesPage />} />
+        <Route path="/tienda/promociones/:id" element={<PromocionDetallePage />} />
+        <Route path="/tienda/marketing" element={<MarketingStorePage />} />
+        <Route path="/tienda/marketing/:id" element={<CampaignDetailPage />} />
+      </Route>
       
       <Route element={<PublicRoute />}>
         <Route path="/admin/login" element={<LoginPage />} />
@@ -62,6 +75,8 @@ export default function AppRouter() {
           <Route path="/admin/categorias" element={<CategoriesPage />} />
           <Route path="/admin/consultas" element={<ConsultasPage />} />
           <Route path="/admin/reservas" element={<ReservasPage />} />
+          <Route path="/admin/marketing" element={<MarketingCampaignsPage />} />
+          <Route path="/admin/catalogos" element={<CatalogosPage />} />
           <Route path="/admin/configuracion" element={<SettingsPage />} />
           <Route path="/admin/usuarios" element={<UsersPage />} />
         </Route>

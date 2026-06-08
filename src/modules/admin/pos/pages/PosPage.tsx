@@ -1,11 +1,18 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../../../../store'
 import { useAdminStore } from '../../../../store/adminStore'
-import { DirectSale, DirectSaleItem, Reserva, MetodoPago, Product, THEME_PRESETS, ThemeType } from '../../../../types'
+import { DirectSale, DirectSaleItem, Reserva, MetodoPago, Product, StockByVariant, THEME_PRESETS, ThemeType, PromocionAplicada } from '../../../../types'
+import { calcularMejorCampania } from '../../../../services/promocionesService'
+import PosCampaignsV2 from '../components/PosCampaignsV2'
 
 interface CartItem {
   product: Product
+  variantId?: string
+  colorName?: string
+  sizeName?: string
+  colorTipo?: string
   quantity: number
+  precioCampania?: number
 }
 
 type TempSaleItem = {
@@ -14,6 +21,7 @@ type TempSaleItem = {
   productCode?: string
   quantity: number
   price: number
+  variantId?: string
 }
 
 export default function PosPage() {
@@ -55,6 +63,55 @@ export default function PosPage() {
   const [errors, setErrors] = useState<{[key: string]: string}>({})
   const [conAbono, setConAbono] = useState(false)
   const [abonoMonto, setAbonoMonto] = useState('')
+  const [promoResult, setPromoResult] = useState<{
+    subtotal: number
+    totalDiscount: number
+    envio: number
+    envioGratis: boolean
+    total: number
+    promocionesAplicadas: PromocionAplicada[]
+  } | null>(null)
+  const [promoActiva, setPromoActiva] = useState(false)
+  const [showCampaigns, setShowCampaigns] = useState(false)
+  const [variantPicker, setVariantPicker] = useState<{ product: Product; variants: StockByVariant[] } | null>(null)
+
+  const handleAddFromV2 = (product: Product, quantity: number, precio: number, variantId?: string) => {
+    const key = `${product.id}:${variantId || ''}`
+    setCart(prev => {
+      const existing = prev.find(item => `${item.product.id}:${item.variantId || ''}` === key)
+      if (existing) {
+        return prev.map(item =>
+          `${item.product.id}:${item.variantId || ''}` === key
+            ? { ...item, quantity: item.quantity + quantity, precioCampania: precio ?? item.precioCampania }
+            : item
+        )
+      }
+      return [...prev, { product, variantId, quantity, precioCampania: precio }]
+    })
+  }
+
+  useEffect(() => {
+    if (cart.length === 0) { setPromoResult(null); setPromoActiva(false); return }
+    const costo = settings?.costo_envio ?? 5
+    calcularMejorCampania(
+      cart.map(i => ({ producto: i.product, cantidad: i.quantity, colorTipo: i.colorTipo })),
+      costo
+    ).then(r => {
+      if (r) {
+        setPromoResult({
+          subtotal: r.subtotalOriginal,
+          totalDiscount: r.descuentoTotal,
+          envio: r.envio,
+          envioGratis: r.envioGratis,
+          total: r.total,
+          promocionesAplicadas: r.promocionesAplicadas,
+        })
+      } else {
+        setPromoResult(null)
+      }
+      setPromoActiva(false)
+    })
+  }, [cart, settings?.costo_envio])
 
   // Sincronizar abonoMonto → montoRecibido cuando es con abono y método efectivo
   useEffect(() => {
@@ -102,6 +159,11 @@ export default function PosPage() {
   })
 
   const addToCart = (product: Product) => {
+    const variants = product.stockByVariants?.filter(v => v.stock > 0)
+    if (variants && variants.length > 0) {
+      setVariantPicker({ product, variants })
+      return
+    }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id)
       if (existing) {
@@ -115,29 +177,58 @@ export default function PosPage() {
     })
   }
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId))
+  const addVariantToCart = (product: Product, variant: StockByVariant) => {
+    setVariantPicker(null)
+    const key = `${product.id}:${variant.id || ''}`
+    setCart(prev => {
+      const existing = prev.find(item => `${item.product.id}:${item.variantId || ''}` === key)
+      if (existing) {
+        return prev.map(item => 
+          `${item.product.id}:${item.variantId || ''}` === key
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+      return [...prev, {
+        product,
+        variantId: variant.id,
+        colorName: variant.colorName,
+        sizeName: variant.sizeName,
+        colorTipo: variant.color_tipo,
+        quantity: 1,
+      }]
+    })
   }
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const removeFromCart = (productId: string, variantId?: string) => {
+    const key = `${productId}:${variantId || ''}`
+    setCart(prev => prev.filter(item => `${item.product.id}:${item.variantId || ''}` !== key))
+  }
+
+  const updateQuantity = (productId: string, variantId: string | undefined, quantity: number) => {
+    const key = `${productId}:${variantId || ''}`
     if (quantity <= 0) {
-      removeFromCart(productId)
+      removeFromCart(productId, variantId)
       return
     }
     setCart(prev => prev.map(item =>
-      item.product.id === productId ? { ...item, quantity } : item
+      `${item.product.id}:${item.variantId || ''}` === key ? { ...item, quantity } : item
     ))
   }
 
-  const subtotal = cart.reduce((sum, item) => {
-    const price = item.product.en_liquidacion && item.product.precio_liquidacion
-      ? item.product.precio_liquidacion
-      : item.product.price
+  const rawSubtotal = cart.reduce((sum, item) => {
+    const price = item.precioCampania
+      ?? (item.product.en_liquidacion && item.product.precio_liquidacion
+        ? item.product.precio_liquidacion
+        : item.product.price)
     return sum + (price * item.quantity)
   }, 0)
 
-  const costoEnvio = settings?.costo_envio ?? 5
-  const total = subtotal + costoEnvio
+  const costoEnvioBase = settings?.costo_envio ?? 5
+  const subtotal = (promoActiva && promoResult) ? promoResult.subtotal : rawSubtotal
+  const descuentoTotal = (promoActiva && promoResult) ? promoResult.totalDiscount : 0
+  const costoEnvio = (promoActiva && promoResult) ? promoResult.envio : costoEnvioBase
+  const total = (promoActiva && promoResult) ? promoResult.total : (rawSubtotal + costoEnvioBase)
 
   const selectedClientData = clientes.find(c => c.id === selectedClient)
 
@@ -200,13 +291,15 @@ export default function PosPage() {
       quantity: item.quantity,
       price: item.product.en_liquidacion && item.product.precio_liquidacion
         ? item.product.precio_liquidacion
-        : item.product.price
+        : item.product.price,
+      variantId: item.variantId,
     }))
 
     const codigo = `PED-${Date.now()}`
     const fecha = new Date().toISOString().split('T')[0]
 
     if (saleType === 'directo') {
+      const promos = promoResult?.promocionesAplicadas || []
       const newSale: DirectSale = {
         id: codigo,
         cliente: selectedClientData?.nombre || 'Cliente mostrador',
@@ -226,6 +319,10 @@ export default function PosPage() {
         tarjeta_last4: metodoPago === 'tarjeta' ? cardLast4 : undefined,
         tarjeta_autori: metodoPago === 'tarjeta' ? cardAutori : undefined,
         factura_generada: generarFactura,
+        subtotal,
+        descuento_total: descuentoTotal,
+        envio: costoEnvio,
+        promociones_aplicadas: promos,
       }
       console.log("Guardando venta en direct_sales");
       addDirectSale(newSale)
@@ -240,6 +337,7 @@ export default function PosPage() {
         cantidad: i.quantity,
         precio_unitario: i.price,
         subtotal: i.price * i.quantity,
+        variantId: i.variantId,
       }))
       const newReserva: Reserva = {
         id: codigo,
@@ -429,7 +527,7 @@ export default function PosPage() {
 
   if (!isSaleActive) {
     return (
-      <div style={{ animation: 'fadeUp .4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 120px)' }}>
+      <div style={{ animation: 'fadeUp .4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 'calc(100dvh - 120px)' }}>
         <div style={{ textAlign: 'center', maxWidth: 400 }}>
           <div style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #22c55e, #16a34a)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
             <svg width="40" height="40" fill="none" stroke="white" viewBox="0 0 24 24">
@@ -462,7 +560,7 @@ export default function PosPage() {
             </button>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 40 }}>
+          <div className="pos-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 40 }}>
             <div style={{ padding: 20, background: tc.surface, borderRadius: 12, border: `1px solid ${tc.border}` }}>
               <div style={{ fontSize: 24, marginBottom: 8 }}>📊</div>
               <div style={{ fontSize: 12, color: tc.textMuted }}>Ventas Hoy</div>
@@ -510,14 +608,15 @@ export default function PosPage() {
     <>
       <style>{`
         @media (min-width: 768px) {
-          .pos-content { flex-direction: row !important; overflow: hidden !important; }
+          .pos-content { flex-direction: row !important; }
           .pos-products { flex: 1 !important; overflow: auto !important; }
-          .pos-cart { width: 380px !important; max-height: none !important; flex: none !important; overflow: auto !important; }
+          .pos-cart { width: 380px !important; flex: none !important; overflow: auto !important; }
         }
         @media (max-width: 767px) {
-          .pos-layout { overflow: auto !important; height: auto !important; min-height: calc(100vh - 120px) !important; }
+          .pos-layout { overflow: auto !important; height: auto !important; min-height: calc(100dvh - 120px) !important; }
           .pos-products { max-height: 50vh !important; overflow: auto !important; }
-          .pos-cart { max-height: none !important; overflow: auto !important; }
+          .pos-cart { max-height: 40vh !important; overflow: auto !important; }
+          .pos-stats { grid-template-columns: 1fr !important; }
         }
       `}</style>
       <div className="pos-layout" style={{ 
@@ -525,7 +624,7 @@ export default function PosPage() {
       display: 'flex', 
       flexDirection: 'column',
       gap: 16, 
-      height: 'calc(100vh - 120px)',
+      height: 'calc(100dvh - 120px)',
       padding: 16,
       overflow: 'hidden'
     }}>
@@ -539,6 +638,17 @@ export default function PosPage() {
           <span style={{ fontSize: 14, color: tc.textMuted, fontWeight: 500 }}>Nueva Venta</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => setShowCampaigns(true)}
+            style={{
+              padding: '8px 14px', borderRadius: 20, border: `1px solid #f59e0b`,
+              background: showCampaigns ? '#f59e0b' : 'transparent',
+              color: showCampaigns ? '#fff' : '#f59e0b', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            🚀 Campañas
+          </button>
           {saleType === 'reservado' && (
             <div style={{ display: 'flex', background: tc.background, borderRadius: 20, padding: 2, border: `1px solid ${tc.border}` }}>
               <button
@@ -575,7 +685,7 @@ export default function PosPage() {
       {/* Contenido principal */}
       <div className="pos-content" style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, flexDirection: 'column', overflow: 'hidden' }}>
         {/* Panel Izquierdo - Productos */}
-        <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: tc.surface, borderRadius: 16, padding: 16, maxHeight: 'calc(100vh - 200px)' }}>
+        <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: tc.surface, borderRadius: 16, padding: 16, maxHeight: 'calc(100dvh - 200px)' }}>
           {/* Buscador */}
           <div style={{ marginBottom: 12, flexShrink: 0 }}>
             <div style={{ position: 'relative' }}>
@@ -663,7 +773,7 @@ export default function PosPage() {
         </div>
 
         {/* Panel Derecho - Carrito */}
-        <div className="pos-cart" style={{ width: '100%', minWidth: 0, background: tc.surface, border: `1px solid ${tc.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+        <div className="pos-cart" style={{ width: '100%', minWidth: 0, background: tc.surface, border: `1px solid ${tc.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'auto', minHeight: 0 }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${tc.border}` }}>
           <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600, color: tc.text }}>Punto de Venta</h3>
           
@@ -710,7 +820,7 @@ export default function PosPage() {
         </div>
 
         {/* Carrito */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16, minHeight: 0 }}>
+        <div style={{ padding: 16 }}>
           {errors.carrito && (
             <div style={{ padding: 12, background: tc.error + '22', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
               <span style={{ color: tc.error, fontSize: 12 }}>{errors.carrito}</span>
@@ -721,32 +831,55 @@ export default function PosPage() {
               Agrega productos al carrito
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <>
+              {promoResult && promoResult.promocionesAplicadas.length > 0 && (
+                <button
+                  onClick={() => setPromoActiva(!promoActiva)}
+                  style={{
+                    width: '100%', padding: '10px 16px', borderRadius: 10, border: promoActiva ? 'none' : `2px solid ${tc.primary}`,
+                    background: promoActiva ? '#22c55e' : tc.primary + '15',
+                    color: promoActiva ? '#fff' : tc.primary,
+                    fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    marginBottom: 10,
+                  }}
+                >
+                  {promoActiva ? '✅ Promo aplicada' : '🎉 Promo disponible'}
+                  {!promoActiva && <span style={{ fontSize: 11, fontWeight: 400 }}>— toca para aplicar</span>}
+                </button>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {cart.map(item => {
-                const price = item.product.en_liquidacion && item.product.precio_liquidacion
-                  ? item.product.precio_liquidacion
-                  : item.product.price
+                const price = item.precioCampania
+                  ?? (item.product.en_liquidacion && item.product.precio_liquidacion
+                    ? item.product.precio_liquidacion
+                    : item.product.price)
                 return (
-                  <div key={item.product.id} style={{ padding: 12, background: tc.background, borderRadius: 12 }}>
+                  <div key={`${item.product.id}:${item.variantId || ''}`} style={{ padding: 12, background: tc.background, borderRadius: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: tc.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product.name}</div>
+                        <div style={{ fontSize: 10, color: tc.textMuted }}>
+                          {item.colorName && <span>{item.colorName}</span>}
+                          {item.colorName && item.sizeName && <span> · </span>}
+                          {item.sizeName && <span>Talla: {item.sizeName}</span>}
+                        </div>
                         <div style={{ fontSize: 11, color: tc.primary }}>${price.toFixed(2)} c/u</div>
                       </div>
                       <button
-                        onClick={() => removeFromCart(item.product.id)}
+                        onClick={() => removeFromCart(item.product.id, item.variantId)}
                         style={{ background: 'none', border: 'none', color: tc.error, cursor: 'pointer', fontSize: 18, padding: '0 4px', marginLeft: 8, flexShrink: 0 }}
                       >✕</button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button
-                          onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.product.id, item.variantId, item.quantity - 1)}
                           style={{ width: 32, height: 32, borderRadius: 8, background: tc.surface, border: `1px solid ${tc.border}`, color: tc.text, cursor: 'pointer', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >−</button>
                         <span style={{ fontSize: 15, fontWeight: 600, color: tc.text, minWidth: 28, textAlign: 'center' }}>{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.product.id, item.variantId, item.quantity + 1)}
                           style={{ width: 32, height: 32, borderRadius: 8, background: tc.surface, border: `1px solid ${tc.border}`, color: tc.text, cursor: 'pointer', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >+</button>
                       </div>
@@ -756,12 +889,39 @@ export default function PosPage() {
                 )
               })}
             </div>
+            </>
           )}
         </div>
 
           {/* Total y Pago */}
         <div style={{ padding: 16, borderTop: `1px solid ${tc.border}`, flexShrink: 0, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          {descuentoTotal > 0 && (
+            <div style={{ marginBottom: 8, padding: '8px 12px', background: '#22c55e11', borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600, display: 'block', marginBottom: 4 }}>🎉 Promociones aplicadas</span>
+              {promoResult?.promocionesAplicadas.map((p, i) => (
+                <div key={i} style={{ fontSize: 11, color: '#16a34a', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{p.descripcion}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ color: tc.textMuted, fontSize: 12 }}>Subtotal</span>
+            <span style={{ color: tc.text, fontSize: 13 }}>${subtotal.toFixed(2)}</span>
+          </div>
+          {descuentoTotal > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ color: '#22c55e', fontSize: 12 }}>Descuento</span>
+              <span style={{ color: '#22c55e', fontSize: 13 }}>-${descuentoTotal.toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ color: tc.textMuted, fontSize: 12 }}>
+              Envío {promoActiva && promoResult?.envioGratis ? <span style={{ color: '#22c55e', fontWeight: 600 }}>GRATIS</span> : ''}
+            </span>
+            <span style={{ color: tc.text, fontSize: 13 }}>{promoActiva && promoResult?.envioGratis ? '$0.00' : `$${costoEnvio.toFixed(2)}`}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, borderTop: `1px solid ${tc.border}`, paddingTop: 8 }}>
             <span style={{ color: tc.textMuted, fontSize: 13 }}>Total</span>
             <span style={{ color: tc.text, fontSize: 20, fontWeight: 700 }}>${total.toFixed(2)}</span>
           </div>
@@ -944,6 +1104,116 @@ export default function PosPage() {
       </div>
       </div>
     </div>
+
+    {showCampaigns && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+      }} onClick={() => setShowCampaigns(false)}>
+        <div style={{
+          background: '#fff', borderRadius: 16, padding: 20, width: 520,
+          maxWidth: '95vw', maxHeight: '85vh', overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+              🚀 Campañas
+            </h2>
+            <button onClick={() => setShowCampaigns(false)}
+              style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#6b7280', padding: '0 4px' }}
+            >×</button>
+          </div>
+          <PosCampaignsV2
+            themeColors={tc}
+            showDirectAdd
+            onAddToPosCart={handleAddFromV2}
+            onClose={() => setShowCampaigns(false)}
+          />
+        </div>
+      </div>
+    )}
+
+    {variantPicker && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+      }} onClick={() => setVariantPicker(null)}>
+        <div style={{
+          background: '#fff', borderRadius: 16, padding: 24, width: 380,
+          maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Seleccionar variante</h3>
+            <button onClick={() => setVariantPicker(null)}
+              style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#6b7280', padding: '0 4px' }}
+            >×</button>
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: '#111827' }}>
+            {variantPicker.product.name}
+          </div>
+
+          {/* Agrupar variantes por color */}
+          {Object.entries(
+            variantPicker.variants.reduce((acc, v) => {
+              if (!acc[v.colorId]) acc[v.colorId] = { colorName: v.colorName, colorHex: v.colorHex, colorImage: v.colorImage, sizes: [] as StockByVariant[] }
+              acc[v.colorId].sizes.push(v)
+              return acc
+            }, {} as Record<string, { colorName: string; colorHex: string; colorImage?: string; sizes: StockByVariant[] }>)
+          ).map(([colorId, group]) => (
+            <div key={colorId} style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                {group.colorImage ? (
+                  <img src={group.colorImage} alt={group.colorName} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: group.colorHex || '#ccc' }} />
+                )}
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{group.colorName}</span>
+                {variantPicker.product.stockByVariants?.find(v => v.colorId === colorId)?.color_tipo && (
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+                    background: '#f3e8ff', color: '#7c3aed',
+                  }}>
+                    {variantPicker.product.stockByVariants?.find(v => v.colorId === colorId)?.color_tipo}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {group.sizes.map(variant => (
+                  <button
+                    key={`${variant.id || `${variant.colorId}-${variant.sizeId}`}`}
+                    onClick={() => addVariantToCart(variantPicker.product, variant)}
+                    disabled={variant.stock <= 0}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      padding: '8px 14px', borderRadius: 10,
+                      border: variant.stock > 0 ? '1px solid #22c55e' : '1px solid #e5e7eb',
+                      background: variant.stock > 0 ? '#f0fdf4' : '#f9fafb',
+                      cursor: variant.stock > 0 ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.borderColor = '#16a34a' } }}
+                    onMouseLeave={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#22c55e' } }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 600, color: variant.stock > 0 ? '#059669' : '#9ca3af' }}>
+                      {variant.sizeName || 'Único'}
+                    </span>
+                    <span style={{ fontSize: 10, color: variant.stock > 0 ? '#6b7280' : '#d1d5db' }}>
+                      Stock: {variant.stock}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                      ${(variant.precio || variantPicker.product.price).toFixed(2)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     </>
   )
 }

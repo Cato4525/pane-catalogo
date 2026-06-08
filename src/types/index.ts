@@ -32,6 +32,10 @@ export interface Product {
   // Campos adicionales para textil
   modelo: string;
   color: string;
+
+  // Promociones
+  promotion_category?: string;
+  color_tipo?: string;
 }
 
 export interface StockByVariant {
@@ -45,6 +49,7 @@ export interface StockByVariant {
   stock: number;
   precio?: number;
   sku?: string;
+  color_tipo?: string;
 }
 
 export interface Category {
@@ -332,6 +337,31 @@ export interface DirectSaleItem {
   productCode?: string;
   quantity: number;
   price: number;
+  variantId?: string;
+}
+
+export interface PromocionAplicada {
+  campania_id: string;
+  campania_nombre: string;
+  campania_tipo: string;
+  descuento: number;
+  descripcion: string;
+}
+
+export interface SaleItem {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  product_name: string;
+  product_code?: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+  descuento_aplicado?: number;
+  precio_original?: number;
+  precio_final?: number;
+  promocion_id?: string;
+  promocion_nombre?: string;
 }
 
 export interface DirectSale {
@@ -343,6 +373,7 @@ export interface DirectSale {
   direccion: string;
   ciudad: string;
   items: DirectSaleItem[];
+  saleItems?: SaleItem[];
   monto: number;
   estado: SaleStatus;
   fecha: string;
@@ -354,6 +385,10 @@ export interface DirectSale {
   tarjeta_last4?: string;
   tarjeta_autori?: string;
   factura_generada?: boolean;
+  subtotal?: number;
+  descuento_total?: number;
+  envio?: number;
+  promociones_aplicadas?: PromocionAplicada[];
 }
 
 export interface ShippingField {
@@ -391,6 +426,7 @@ export interface StoreSettings {
     imagen_principal: string;
   };
   visitas: number;
+  backgroundImage?: string;
 }
 
 export type MovimientoTipo = 'entrada' | 'salida' | 'ajuste_entrada' | 'ajuste_salida' | 'devolucion';
@@ -462,7 +498,7 @@ export interface Reserva {
   abono_confirmado: boolean;
   items?: ReservaItem[];
   abonos?: Abono[];
-  origen: 'store' | 'pos';
+  origen: 'store' | 'pos' | 'promocion';
 }
 
 export interface ReservaItem {
@@ -473,6 +509,7 @@ export interface ReservaItem {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  variantId?: string;
 }
 
 export interface ConsultaProducto {
@@ -542,4 +579,111 @@ export interface Catalogo {
   fecha_inicio: string;
   fecha_fin: string | null;
   created_at: string;
+}
+
+// ========== NUEVO SISTEMA DE PROMOCIONES (Campañas) ==========
+
+export type TipoCampania = 'PRECIO_FIJO' | 'PORCENTAJE' | 'MONTO_FIJO' | 'COMPRA_X_LLEVA_Y' | 'COMBO' | 'ENVIO_GRATIS';
+export type CategoriaCampania = 'PROMOCION' | 'DESCUENTO' | 'OFERTA' | 'LIQUIDACION' | 'BLACK_FRIDAY' | 'TEMPORADA';
+export type EstadoCampania = 'activo' | 'inactivo' | 'borrador';
+
+export interface CampaniaRegla {
+  id: string;
+  campania_id: string;
+  tipo_regla: string;
+  cantidad_minima: number;
+  monto_minimo: number;
+  porcentaje: number;
+  precio_fijo: number;
+  envio_gratis: boolean;
+  parear_color_tipo?: boolean;
+  created_at: string;
+}
+
+export interface CampaniaProducto {
+  id: string;
+  campania_id: string;
+  producto_id: string;
+  created_at: string;
+}
+
+export interface CampaniaFiltro {
+  id: string;
+  campania_id: string;
+  campo: string;
+  operador: string;
+  valor: string;
+  created_at: string;
+}
+
+export interface Campania {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  tipo: TipoCampania;
+  categoria: CategoriaCampania;
+  estado: EstadoCampania;
+  catalogo_id?: string | null;
+  catalogo_nombre?: string;
+  catalogo_excluir_id?: string | null;
+  catalogo_excluir_nombre?: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  prioridad: number;
+  created_at: string;
+  updated_at: string;
+  reglas?: CampaniaRegla[];
+  productos?: CampaniaProducto[];
+  filtros?: CampaniaFiltro[];
+}
+
+export interface CarritoPromocionItem {
+  producto: Product;
+  cantidad: number;
+  precioPromocion: number;
+  descuento: number;
+  colorTipo?: string;
+}
+
+export interface CalculoPromocion {
+  items: CarritoPromocionItem[]
+  subtotalOriginal: number
+  descuentoTotal: number
+  envio: number
+  envioGratis: boolean
+  total: number
+  promocionesAplicadas: PromocionAplicada[]
+}
+
+export interface ResumenPromocion {
+  campania: Campania;
+  items: CarritoPromocionItem[];
+  subtotalOriginal: number;
+  descuentoTotal: number;
+  envio: number;
+  total: number;
+  abonoMinimo: number;
+  saldoPendiente: number;
+}
+
+// ========== SISTEMA DE CATÁLOGOS TEMÁTICOS (para el menú de la tienda) ==========
+
+export type TipoCatalogoSeccion = 'sistema' | 'personalizado'
+
+export interface CatalogoSeccionProducto {
+  id: string
+  catalogo_id: string
+  producto_id: string
+  fecha_vencimiento: string | null
+  created_at: string
+}
+
+export interface CatalogoSeccion {
+  id: string
+  nombre: string
+  descripcion: string
+  tipo: TipoCatalogoSeccion
+  created_at: string
+  updated_at: string
+  productos?: CatalogoSeccionProducto[]
 }

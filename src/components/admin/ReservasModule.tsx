@@ -48,6 +48,7 @@ export default function ReservasModule({ themeColors, isEjecutivo, reservas: pro
 
   const [filtroEstado, setFiltroEstado] = useState<EstadoReserva | 'todos' | 'enviadas'>('todos')
   const [filtroComprobante, setFiltroComprobante] = useState<'todos' | 'con' | 'sin'>('todos')
+  const [filtroOrigen, setFiltroOrigen] = useState<string>('todos')
   const [reservaDetalle, setReservaDetalle] = useState<any | null>(null)
   const [modalAbono, setModalAbono] = useState<{reserva: any; monto: string; notas: string; imagen: File | null; preview: string | null} | null>(null)
   const [guardandoAbono, setGuardandoAbono] = useState(false)
@@ -63,7 +64,8 @@ export default function ReservasModule({ themeColors, isEjecutivo, reservas: pro
       : filtroComprobante === 'con' 
         ? !!r.comprobante_url 
         : !r.comprobante_url
-    return matchEstado && matchComprobante
+    const matchOrigen = filtroOrigen === 'todos' ? true : r.origen === filtroOrigen
+    return matchEstado && matchComprobante && matchOrigen
   })
 
   const handleVerDetalle = (reserva: any) => {
@@ -222,6 +224,28 @@ export default function ReservasModule({ themeColors, isEjecutivo, reservas: pro
             >
               ⚠️ Sin comprobante
             </button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: tc.textMuted, alignSelf: 'center' }}>Origen:</span>
+            {['todos', 'store', 'pos', 'promocion', 'tienda'].map(origen => (
+              <button
+                key={origen}
+                onClick={() => setFiltroOrigen(origen)}
+                style={{
+                  padding: '4px 10px',
+                  background: filtroOrigen === origen ? tc.primary : 'transparent',
+                  border: `1px solid ${filtroOrigen === origen ? tc.primary : tc.border}`,
+                  borderRadius: 6,
+                  color: filtroOrigen === origen ? '#000' : tc.textMuted,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {origen === 'todos' ? 'Todos' : origen === 'promocion' ? 'Promoción' : origen}
+              </button>
+            ))}
           </div>
         </div>
       </div>
