@@ -13,7 +13,7 @@ import {
   MktResultadoEngine, MktResultadoMultiples, MktBeneficioAplicado,
   MktEngineInput,
 } from '../types/marketing'
-import { validate2x28Promotion, Validate2x28Item } from './promotionValidator'
+import { validate2x28Promotion, Validate2x28Item, validatePromotionRules, ValidatePromotionItem } from './promotionValidator'
 import { mktFetchCampanias, mktValidarCupon, mktIncrementarUsoCupon, mktRegistrarOperacion } from './campaignService'
 
 // Cache para catálogos
@@ -166,15 +166,23 @@ function evaluarRegla(
       let sueltos: number
       let itemsParaPrecioSueltos: { producto: Product; cantidad: number; colorTipo?: string }[]
 
-      if (config.parear_color_tipo) {
-        const itemsForValidation: Validate2x28Item[] = items.map(i => ({
+      if (config.parear_color_tipo || config.promotion_rules) {
+        const rules = config.promotion_rules || null
+        const itemsForValidation: ValidatePromotionItem[] = items.map(i => ({
           productId: i.producto.id,
           price: i.producto.price,
           quantity: i.cantidad,
           colorTipo: i.colorTipo,
           colorName: i.producto.color,
         }))
-        const validation = validate2x28Promotion(itemsForValidation)
+
+        let validation
+        if (rules) {
+          validation = validatePromotionRules(rules, itemsForValidation)
+        } else {
+          const legacyItems: Validate2x28Item[] = itemsForValidation
+          validation = validate2x28Promotion(legacyItems)
+        }
 
         if (!validation.valid) {
           return null

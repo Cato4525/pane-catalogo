@@ -1,5 +1,5 @@
 import { Campania, CampaniaRegla, Product, CarritoPromocionItem, CalculoPromocion, CatalogoSeccion, PromocionAplicada } from '../types'
-import { validate2x28Promotion, Validate2x28Item } from './promotionValidator'
+import { validate2x28Promotion, Validate2x28Item, validatePromotionRules, ValidatePromotionItem } from './promotionValidator'
 
 let cachedCampanias: Campania[] | null = null
 let lastFetch = 0
@@ -336,15 +336,24 @@ export function calcularPromocion(
   switch (campania.tipo) {
     case 'PRECIO_FIJO': {
       if (regla && regla.cantidad_minima > 0 && regla.precio_fijo > 0) {
-        if (regla.parear_color_tipo) {
-          const itemsForValidation: Validate2x28Item[] = items.map(i => ({
+        const reglaConfig = (regla as any).configuracion_json || {}
+        const promRules = reglaConfig.promotion_rules
+        if (regla.parear_color_tipo || promRules) {
+          const itemsForValidation: ValidatePromotionItem[] = items.map(i => ({
             productId: i.producto.id,
             price: i.producto.price,
             quantity: i.cantidad,
             colorTipo: i.colorTipo,
             colorName: i.producto.color,
           }))
-          const validation = validate2x28Promotion(itemsForValidation)
+
+          let validation
+          if (promRules) {
+            validation = validatePromotionRules(promRules, itemsForValidation)
+          } else {
+            const legacyItems: Validate2x28Item[] = itemsForValidation
+            validation = validate2x28Promotion(legacyItems)
+          }
 
           if (validation.valid) {
             const totalQty = items.reduce((s, i) => s + i.cantidad, 0)

@@ -11,7 +11,8 @@ import {
   MktCampania, MktCampaniaRegla, MktCampaniaFiltro,
   MktTipoCampania, MktCategoriaCampania, MktEstadoCampania,
   MKT_TIPO_LABELS, MKT_CATEGORIA_LABELS, MKT_CATEGORIA_COLORS,
-  MKT_TIPO_COLORS,
+  MKT_TIPO_COLORS, PromotionRules, ColorPair,
+  ALL_COLOR_PAIRS, COLOR_PAIR_LABELS,
 } from '../../../../types/marketing'
 import { mktFetchCampanias, mktCrearCampania, mktActualizarCampania, mktEliminarCampania, mktCambiarEstado } from '../../../../services/campaignService'
 import { fetchCatalogos } from '../../../../services/catalogosService'
@@ -214,6 +215,38 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
   const [envioGratis, setEnvioGratis] = useState(regla?.envio_gratis || false)
   const [parearColorTipo, setParearColorTipo] = useState(regla?.configuracion_json?.parear_color_tipo ?? false)
 
+  const existingRules = regla?.configuracion_json?.promotion_rules as PromotionRules | undefined
+  const [colorCombinationMode, setColorCombinationMode] = useState<PromotionRules['colorCombinationMode']>(existingRules?.colorCombinationMode || 'different')
+  const [allowedCombinations, setAllowedCombinations] = useState<ColorPair[]>(existingRules?.allowedCombinations || [])
+  const [blockedCombinations, setBlockedCombinations] = useState<ColorPair[]>(existingRules?.blockedCombinations || [])
+
+  const customPairEnabled = (pair: ColorPair) => {
+    if (allowedCombinations.length > 0) return allowedCombinations.includes(pair)
+    return !blockedCombinations.includes(pair)
+  }
+
+  const toggleCustomPair = (pair: ColorPair) => {
+    if (allowedCombinations.length > 0) {
+      setAllowedCombinations(prev =>
+        prev.includes(pair) ? prev.filter(p => p !== pair) : [...prev, pair]
+      )
+    } else {
+      setBlockedCombinations(prev =>
+        prev.includes(pair) ? prev.filter(p => p !== pair) : [...prev, pair]
+      )
+    }
+  }
+
+  const switchCustomMode = (useAllowed: boolean) => {
+    if (useAllowed && allowedCombinations.length === 0) {
+      setAllowedCombinations(ALL_COLOR_PAIRS.filter(p => !blockedCombinations.includes(p)))
+      setBlockedCombinations([])
+    } else if (!useAllowed && blockedCombinations.length === 0) {
+      setBlockedCombinations(ALL_COLOR_PAIRS.filter(p => !allowedCombinations.includes(p)))
+      setAllowedCombinations([])
+    }
+  }
+
   // Filtros
   const filtrosExistentes = campania?.filtros || []
   const [filtroCampo, setFiltroCampo] = useState(filtrosExistentes[0]?.campo || 'color_tipo')
@@ -238,6 +271,12 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
         }]
       : []
 
+    const promotionRules: PromotionRules = {
+      colorCombinationMode,
+      allowedCombinations: colorCombinationMode === 'custom' ? allowedCombinations : [],
+      blockedCombinations: colorCombinationMode === 'custom' ? blockedCombinations : [],
+    }
+
     await onSave({
       nombre,
       descripcion,
@@ -260,7 +299,10 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
         precio_fijo: precioFijo,
         descuento_fijo: descuentoFijo,
         envio_gratis: envioGratis,
-        configuracion_json: { parear_color_tipo: parearColorTipo },
+        configuracion_json: {
+          parear_color_tipo: parearColorTipo,
+          promotion_rules: promotionRules,
+        },
       }],
       filtros: filtrosValidos,
     })
@@ -415,6 +457,126 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
                 </div>
                 <input value={filtroValor} onChange={e => setFiltroValor(e.target.value)} style={inputStyle}
                   placeholder="Ej: claro, beige, blanco (separados por coma)" />
+              </div>
+            </div>
+          )}
+
+          {/* Condiciones de combinación */}
+          {(mostrarCantidades || mostrarPrecioFijo) && (
+            <div style={{
+              borderTop: `1px solid ${tc.border}`, paddingTop: 16,
+              borderBottom: `1px solid ${tc.border}`, paddingBottom: 16,
+            }}>
+              <label style={labelStyle}>Condiciones de combinación</label>
+              <p style={{ fontSize: 11, color: tc.textMuted, margin: '2px 0 8px' }}>
+                Configura cómo se deben combinar los tipos de color en los pares de esta promoción
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                  background: colorCombinationMode === 'different' ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${colorCombinationMode === 'different' ? '#22c55e' : tc.border}`,
+                }}>
+                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'different'}
+                    onChange={() => setColorCombinationMode('different')} />
+                  <div>
+                    <span style={{ fontWeight: 500, color: tc.text }}>Permitir únicamente colores diferentes</span>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
+                      color + negro, color + oscuro (ej: 1 prenda de color + 1 oscura/negra)
+                    </p>
+                  </div>
+                </label>
+
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                  background: colorCombinationMode === 'same' ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${colorCombinationMode === 'same' ? '#22c55e' : tc.border}`,
+                }}>
+                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'same'}
+                    onChange={() => setColorCombinationMode('same')} />
+                  <div>
+                    <span style={{ fontWeight: 500, color: tc.text }}>Permitir únicamente colores iguales</span>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
+                      color + color, oscuro + oscuro, negro + negro (mismo grupo de color)
+                    </p>
+                  </div>
+                </label>
+
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                  background: colorCombinationMode === 'custom' ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${colorCombinationMode === 'custom' ? '#22c55e' : tc.border}`,
+                }}>
+                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'custom'}
+                    onChange={() => setColorCombinationMode('custom')} />
+                  <div>
+                    <span style={{ fontWeight: 500, color: tc.text }}>Personalizar combinaciones permitidas</span>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
+                      Selecciona manualmente las combinaciones válidas
+                    </p>
+                  </div>
+                </label>
+
+                {colorCombinationMode === 'custom' && (
+                  <div style={{
+                    marginTop: 8, padding: 12, borderRadius: 8,
+                    background: '#f9fafb', border: `1px solid ${tc.border}`,
+                  }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <button type="button" onClick={() => switchCustomMode(true)}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: `1px solid ${allowedCombinations.length > 0 ? '#22c55e' : tc.border}`,
+                          background: allowedCombinations.length > 0 ? '#f0fdf4' : 'transparent',
+                          color: allowedCombinations.length > 0 ? '#059669' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                        }}>
+                        Permitir seleccionadas
+                      </button>
+                      <button type="button" onClick={() => switchCustomMode(false)}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: `1px solid ${blockedCombinations.length > 0 ? '#ef4444' : tc.border}`,
+                          background: blockedCombinations.length > 0 ? '#fef2f2' : 'transparent',
+                          color: blockedCombinations.length > 0 ? '#ef4444' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                        }}>
+                        Bloquear seleccionadas
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {ALL_COLOR_PAIRS.map(pair => {
+                        const enabled = allowedCombinations.length > 0
+                          ? allowedCombinations.includes(pair)
+                          : !blockedCombinations.includes(pair)
+                        return (
+                          <label key={pair} style={{
+                            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                            padding: '4px 8px', borderRadius: 6,
+                            background: enabled ? '#f0fdf4' : '#fef2f2',
+                            fontSize: 13, color: tc.text,
+                          }}>
+                            <input type="checkbox" checked={enabled}
+                              onChange={() => toggleCustomPair(pair)} />
+                            <span style={{
+                              width: 8, height: 8, borderRadius: '50%',
+                              background: enabled ? '#22c55e' : '#ef4444',
+                              display: 'inline-block',
+                            }} />
+                            {COLOR_PAIR_LABELS[pair]}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <div style={{ fontSize: 11, color: tc.textMuted, marginTop: 6 }}>
+                      {allowedCombinations.length > 0
+                        ? `${allowedCombinations.length} combinaciones permitidas`
+                        : blockedCombinations.length > 0
+                          ? `${blockedCombinations.length} combinaciones bloqueadas`
+                          : 'Todas las combinaciones permitidas'}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

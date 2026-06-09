@@ -230,6 +230,44 @@ export interface MktEngineInput {
 }
 
 // ============================================================
+// PROMOTION RULES — Reglas de combinación de colores
+// ============================================================
+
+export type ColorCombinationMode = 'different' | 'same' | 'custom'
+
+export type ColorPair =
+  | 'color+color'
+  | 'color+oscuro'
+  | 'color+negro'
+  | 'oscuro+oscuro'
+  | 'oscuro+negro'
+  | 'negro+negro'
+
+export interface PromotionRules {
+  colorCombinationMode: ColorCombinationMode
+  allowedCombinations: ColorPair[]
+  blockedCombinations: ColorPair[]
+}
+
+export const ALL_COLOR_PAIRS: ColorPair[] = [
+  'color+color',
+  'color+oscuro',
+  'color+negro',
+  'oscuro+oscuro',
+  'oscuro+negro',
+  'negro+negro',
+]
+
+export const COLOR_PAIR_LABELS: Record<ColorPair, string> = {
+  'color+color': 'color + color',
+  'color+oscuro': 'color + oscuro',
+  'color+negro': 'color + negro',
+  'oscuro+oscuro': 'oscuro + oscuro',
+  'oscuro+negro': 'oscuro + negro',
+  'negro+negro': 'negro + negro',
+}
+
+// ============================================================
 // CONSTANTES
 // ============================================================
 

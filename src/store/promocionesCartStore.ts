@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Campania, Product, CarritoPromocionItem, Cliente, ABONO_MINIMO } from '../types'
 import { calcularPromocion } from '../services/promocionesService'
-import { validate2x28Promotion, Validate2x28Item } from '../services/promotionValidator'
+import { validate2x28Promotion, Validate2x28Item, validatePromotionRules, ValidatePromotionItem } from '../services/promotionValidator'
 import supabase from '../services/supabaseClient'
 
 interface PromocionesCartState {
@@ -28,8 +28,26 @@ interface PromocionesCartState {
 }
 
 function calcularMensajePromo(items: CarritoPromocionItem[], campania: Campania | null): string | null {
-  if (!campania?.reglas?.[0]?.parear_color_tipo) return null
-  if (!campania.reglas[0].cantidad_minima || !campania.reglas[0].precio_fijo) return null
+  if (!campania?.reglas?.[0]) return null
+  const regla = campania.reglas[0]
+  const config = (regla as any).configuracion_json || {}
+  const rules = config.promotion_rules
+
+  if (rules) {
+    const validateItems: ValidatePromotionItem[] = items.map(i => ({
+      productId: i.producto.id,
+      price: i.producto.price,
+      quantity: i.cantidad,
+      colorTipo: i.colorTipo,
+      colorName: i.producto.color,
+    }))
+    const result = validatePromotionRules(rules, validateItems)
+    if (result.valid) return null
+    return result.message ? `⚠️ ${result.message}` : null
+  }
+
+  if (!regla.parear_color_tipo) return null
+  if (!regla.cantidad_minima || !regla.precio_fijo) return null
 
   const itemsForValidation: Validate2x28Item[] = items.map(i => ({
     productId: i.producto.id,
@@ -41,16 +59,16 @@ function calcularMensajePromo(items: CarritoPromocionItem[], campania: Campania 
   const validation = validate2x28Promotion(itemsForValidation)
 
   if (validation.valid) {
-    return `✅ Promoción 2x$${campania.reglas[0].precio_fijo} completa: 1 color + 1 oscuro`
+    return `✅ Promoción 2x$${regla.precio_fijo} completa: 1 color + 1 oscuro`
   }
 
   const totalQty = items.reduce((s, i) => s + i.cantidad, 0)
   if (totalQty < 2) {
     const colores = items.filter(i => i.colorTipo === 'color').reduce((s, i) => s + i.cantidad, 0)
     const oscuros = items.filter(i => i.colorTipo === 'oscuro').reduce((s, i) => s + i.cantidad, 0)
-    if (colores > 0 && oscuros === 0) return `💡 Agrega un producto con color oscuro para completar la promo 2x$${campania.reglas[0].precio_fijo}`
-    if (oscuros > 0 && colores === 0) return `💡 Agrega un producto con color para completar la promo 2x$${campania.reglas[0].precio_fijo}`
-    if (colores === 0 && oscuros === 0) return `💡 Agrega 2 productos para completar la promo 2x$${campania.reglas[0].precio_fijo}`
+    if (colores > 0 && oscuros === 0) return `💡 Agrega un producto con color oscuro para completar la promo 2x$${regla.precio_fijo}`
+    if (oscuros > 0 && colores === 0) return `💡 Agrega un producto con color para completar la promo 2x$${regla.precio_fijo}`
+    if (colores === 0 && oscuros === 0) return `💡 Agrega 2 productos para completar la promo 2x$${regla.precio_fijo}`
   }
 
   return validation.message ? `⚠️ ${validation.message}` : null
@@ -131,18 +149,30 @@ export const usePromocionesCartStore = create<PromocionesCartState>()(
         if (!campania || !cliente) return null
         if (items.length === 0) return null
 
-        if (campania.reglas?.[0]?.parear_color_tipo) {
-          const itemsForValidation: Validate2x28Item[] = items.map(i => ({
+        const reglaConfig = (campania.reglas?.[0] as any)?.configuracion_json || {}
+        const promRules = reglaConfig.promotion_rules
+        if (promRules || campania.reglas?.[0]?.parear_color_tipo) {
+          const itemsForValidation: ValidatePromotionItem[] = items.map(i => ({
             productId: i.producto.id,
             price: i.producto.price,
             quantity: i.cantidad,
             colorTipo: i.colorTipo,
             colorName: i.producto.color,
           }))
-          const validation = validate2x28Promotion(itemsForValidation)
-          if (!validation.valid) {
-            console.warn('[crearReservaPromocion] Validación 2x$28 fallida:', validation.message)
-            return null
+
+          if (promRules) {
+            const validation = validatePromotionRules(promRules, itemsForValidation)
+            if (!validation.valid) {
+              console.warn('[crearReservaPromocion] Validación fallida:', validation.message)
+              return null
+            }
+          } else {
+            const legacyItems: Validate2x28Item[] = itemsForValidation
+            const validation = validate2x28Promotion(legacyItems)
+            if (!validation.valid) {
+              console.warn('[crearReservaPromocion] Validación 2x$28 fallida:', validation.message)
+              return null
+            }
           }
         }
 

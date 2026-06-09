@@ -33,14 +33,14 @@ function mapCampania(row: any): MktCampania {
     permite_acumulacion: row.permite_acumulacion ?? false,
     es_exclusiva: row.es_exclusiva ?? false,
     catalogos_excluidos: row.catalogos_excluidos || [],
-    reglas: row.reglas?.map((r: any) => ({
-      ...r,
-      cantidad_maxima: r.cantidad_maxima ?? 0,
-      descuento_fijo: r.descuento_fijo ?? 0,
-      configuracion_json: typeof r.configuracion_json === 'string'
-        ? JSON.parse(r.configuracion_json)
-        : (r.configuracion_json || {}),
-    })) || [],
+      reglas: row.reglas?.map((r: any) => ({
+        ...r,
+        cantidad_maxima: r.cantidad_maxima ?? 0,
+        descuento_fijo: r.descuento_fijo ?? 0,
+        configuracion_json: typeof r.configuracion_json === 'string'
+          ? JSON.parse(r.configuracion_json)
+          : (r.configuracion_json || {}),
+      })) || [],
     categorias: row.categorias || [],
     exclusiones: row.exclusiones || [],
   }
@@ -159,6 +159,7 @@ export async function mktCrearCampania(
         precio_fijo: r.precio_fijo || 0,
         descuento_fijo: r.descuento_fijo || 0,
         envio_gratis: r.envio_gratis || false,
+        configuracion_json: r.configuracion_json || null,
       }))
     )
   }
@@ -248,6 +249,7 @@ export async function mktActualizarCampania(
           precio_fijo: r.precio_fijo || 0,
           descuento_fijo: r.descuento_fijo || 0,
           envio_gratis: r.envio_gratis || false,
+          configuracion_json: r.configuracion_json || null,
         }))
       )
     }

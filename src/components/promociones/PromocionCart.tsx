@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Campania, CarritoPromocionItem, CalculoPromocion, ABONO_MINIMO } from '../../types'
 import { calcularPromocion } from '../../services/promocionesService'
-import { validate2x28Promotion, Validate2x28Result } from '../../services/promotionValidator'
+import { validate2x28Promotion, Validate2x28Result, validatePromotionRules, ValidatePromotionItem } from '../../services/promotionValidator'
 
 interface Props {
   campania: Campania
@@ -44,20 +44,31 @@ export default function PromocionCart({
     costoEnvio ?? 0
   )
 
-  const validationResult: Validate2x28Result | null = useMemo(() => {
-    if (!campania.reglas?.[0]?.parear_color_tipo) return null
-    return validate2x28Promotion(
-      items.map(i => ({
-        productId: i.producto.id,
-        price: i.producto.price,
-        quantity: i.cantidad,
-        colorTipo: i.colorTipo,
-        colorName: i.producto.color,
-      }))
-    )
+  const validationResult: { valid: boolean; message?: string } | null = useMemo(() => {
+    const regla = campania.reglas?.[0]
+    if (!regla) return null
+    const config = (regla as any).configuracion_json || {}
+    const promRules = config.promotion_rules
+
+    const validateItems = items.map(i => ({
+      productId: i.producto.id,
+      price: i.producto.price,
+      quantity: i.cantidad,
+      colorTipo: i.colorTipo,
+      colorName: i.producto.color,
+    }))
+
+    if (promRules) {
+      const result = validatePromotionRules(promRules, validateItems)
+      return result.valid ? null : result
+    }
+
+    if (!regla.parear_color_tipo) return null
+    const legacy = validate2x28Promotion(validateItems)
+    return legacy.valid ? null : legacy
   }, [campania, items])
 
-  const isPromoInvalid = validationResult && !validationResult.valid
+  const isPromoInvalid = validationResult !== null
 
   return (
     <div style={{
@@ -171,7 +182,7 @@ export default function PromocionCart({
           background: '#fef2f2', border: '1px solid #fca5a5',
           color: '#dc2626', fontWeight: 500, textAlign: 'center',
         }}>
-          {validationResult!.message}
+          {validationResult?.message}
         </div>
       )}
 

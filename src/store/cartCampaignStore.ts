@@ -9,11 +9,32 @@ import { persist } from 'zustand/middleware'
 import { Product } from '../types'
 import { MktCartItem, MktCampania, MktResultadoEngine, MktResultadoMultiples } from '../types/marketing'
 import { mktEvaluar } from '../services/promotionEngine'
+import { validatePromotionRules, ValidatePromotionItem } from '../services/promotionValidator'
 
 function calcularMensajePromo(items: MktCartItem[], campania: MktCampania | null): string {
   if (!campania) return ''
   const regla = campania.reglas?.[0]
-  if (!regla?.configuracion_json?.parear_color_tipo) return ''
+  const config = regla?.configuracion_json || {}
+  const rules = config.promotion_rules
+
+  if (rules) {
+    const validateItems: ValidatePromotionItem[] = items.map(i => ({
+      productId: i.producto.id,
+      price: i.producto.price,
+      quantity: i.cantidad,
+      colorTipo: i.colorTipo,
+      colorName: i.producto.color,
+    }))
+    const result = validatePromotionRules(rules, validateItems)
+    if (result.valid) {
+      if (rules.colorCombinationMode === 'different') return '✅ Pares color/oscuro completos'
+      if (rules.colorCombinationMode === 'same') return '✅ Productos del mismo grupo de color'
+      return '✅ Combinaciones válidas'
+    }
+    return result.message ? `⚠️ ${result.message}` : ''
+  }
+
+  if (!config?.parear_color_tipo) return ''
   const colores = items.filter(i => i.colorTipo === 'color').reduce((s, i) => s + i.cantidad, 0)
   const oscuros = items.filter(i => i.colorTipo === 'oscuro').reduce((s, i) => s + i.cantidad, 0)
   if (colores === 0 && oscuros === 0) return ''
