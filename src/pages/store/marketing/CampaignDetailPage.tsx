@@ -30,6 +30,11 @@ export default function CampaignDetailPage() {
   const [catalogosSecciones, setCatalogosSecciones] = useState<CatalogoSeccion[]>([])
   const [variantPicker, setVariantPicker] = useState<{ product: Product; variants: StockByVariant[] } | null>(null)
 
+  const tiposEnCarrito = useMemo(() => {
+    return [...new Set(cartStore.items.map(i => i.colorTipo).filter(Boolean))]
+  }, [cartStore.items])
+  const hasMixedTypes = tiposEnCarrito.length >= 2
+
   useEffect(() => {
     fetchCatalogos().then(setCatalogosSecciones)
   }, [])
@@ -284,10 +289,15 @@ export default function CampaignDetailPage() {
                             </button>
                           </>
                         ) : (
-                          <button onClick={() => handleAddProduct(producto)}
-                            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: catColor, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
-                            Agregar
-                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <button onClick={() => handleAddProduct(producto)}
+                              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: catColor, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                              Agregar
+                            </button>
+                            {tiposEnCarrito.length === 1 && !hasMixedTypes && cartStore.items.length > 0 && (
+                              <span style={{ fontSize: 9, color: '#f59e0b', whiteSpace: 'nowrap' }}>💡 diferente tipo</span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -411,6 +421,9 @@ export default function CampaignDetailPage() {
                       <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f3f4f6', color: '#6b7280' }}>
                         {group.sizes[0].colorTipo}
                       </span>
+                    )}
+                    {tiposEnCarrito.length === 1 && !hasMixedTypes && cartStore.items.length > 0 && group.sizes[0]?.colorTipo === tiposEnCarrito[0] && (
+                      <span style={{ fontSize: 9, color: '#f59e0b', marginLeft: 'auto' }}>💡 mismo tipo</span>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

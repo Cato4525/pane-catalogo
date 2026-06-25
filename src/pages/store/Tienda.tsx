@@ -378,8 +378,8 @@ export default function Tienda() {
                       <button className="v-ov-btn v-ov-btn-s" onClick={() => setDetalle(p)}>Ver Detalle</button>
                     </div>
                     <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, pointerEvents: 'none', display: 'flex', gap: 4, alignItems: 'center' }}>
-                      {p.codigo && <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 8px', borderRadius: 4, letterSpacing: '0.05em', fontFamily: "'Cormorant Garamond',serif" }}>{p.codigo}</div>}
-                      {(p.images?.length || 0) > 1 && <div style={{ fontSize: 9, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: 4 }}>{p.images?.length} fotos</div>}
+                      {p.codigo && <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.65)', padding: '6px 12px', borderRadius: 6, letterSpacing: '0.08em', fontFamily: "'Cormorant Garamond',serif" }}>{p.codigo}</div>}
+                      {(p.images?.length || 0) > 1 && <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: 4 }}>{p.images?.length} fotos</div>}
                     </div>
                   </div>
                   <div className="v-pinfo">

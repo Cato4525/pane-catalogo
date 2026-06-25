@@ -190,10 +190,11 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
       }
       
       const productosList = cart.map(item => `• ${item.name} x${item.qty} = $${(item.price * item.qty).toFixed(2)}`).join('\n')
+      const productosImg = cart.map(item => item.images?.[0] ? `📷 ${item.images[0]}` : '').filter(Boolean).join('\n')
       
       let mensajeCliente = ''
       if (formData.nombre) mensajeCliente += `Hola ${formData.nombre}, `
-      mensajeCliente += `hemos recibido tu consulta.\n\n*Productos consultados:*\n${productosList}\n\nTotal referencia: $${total.toFixed(2)}\n\nTe responderemos pronto a tu email. Gracias por tu interés!`
+      mensajeCliente += `hemos recibido tu consulta.\n\n*Productos consultados:*\n${productosList}\n\n${productosImg ? `*Imágenes:*\n${productosImg}\n\n` : ''}Total referencia: $${total.toFixed(2)}\n\nTe responderemos pronto a tu email. Gracias por tu interés!`
       
       const mensajeClienteEncoded = encodeURIComponent(mensajeCliente)
       const adminEmail = settings?.contacts?.email || 'contacto@tienda.com'
@@ -203,10 +204,12 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
       const mensajeAdmin = encodeURIComponent(
         `*NUEVA CONSULTA*\n\n` +
         `*Cliente:* ${formData.nombre || 'Anónimo'}\n` +
+        `*Teléfono:* ${formData.telefono || 'No proporcionado'}\n` +
         `*Provincia:* ${formData.ciudad || 'No proporcionada'}\n` +
         `*Email:* ${formData.email || 'No proporcionado'}\n\n` +
         `*Mensaje:* ${formData.direccion || 'Sin mensaje'}\n\n` +
         `*Productos:*\n${productosList}\n\n` +
+        `${productosImg ? `*Imágenes:*\n${productosImg}\n\n` : ''}` +
         `*Total:* $${total.toFixed(2)}`
       )
       
@@ -363,6 +366,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
       const adminPhone = settings?.contacts?.whatsapp?.replace(/\D/g, '') || '593999999999'
       
       const productosList = cart.map(item => `• ${item.name} x${item.qty} = $${(item.price * item.qty).toFixed(2)}`).join('\n')
+      const productosImg = cart.map(item => item.images?.[0] ? `📷 ${item.name}: ${item.images[0]}` : '').filter(Boolean).join('\n')
       
       let mensajeCliente = ''
       if (tieneComprobanteSubido) {
@@ -410,6 +414,7 @@ export default function ReservaModal({ cart, onClose, onSuccess, mode, reservaTi
         `*Envío:* ${formData.envio || 'No especificado'}\n\n` +
         `*Comprobante:* ${tieneComprobanteSubido ? '✅ SUBIDO' : '⏳ PENDIENTE - Cliente notificado'}\n\n` +
         `*Productos:*\n${productosList}\n\n` +
+        `${productosImg ? `*Imágenes:*\n${productosImg}\n\n` : ''}` +
         `*Total:* $${total.toFixed(2)}\n` +
         `*Abono:* $${abonoCalculado.toFixed(2)}\n` +
         `*Saldo:* $${(total - abonoCalculado).toFixed(2)}`

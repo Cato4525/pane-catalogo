@@ -23,6 +23,7 @@ interface ReservasModuleProps {
 
 export default function ReservasModule({ themeColors, isEjecutivo, reservas: propReservas, onUpdateReserva, onDeleteReserva }: ReservasModuleProps) {
   const storeReservas = useStore(state => state.reservas)
+  const storeProducts = useStore(state => state.products)
   const storeUpdateReserva = useStore(state => state.updateReserva)
   const storeDeleteReserva = useStore(state => state.deleteReserva)
   
@@ -516,22 +517,31 @@ export default function ReservasModule({ themeColors, isEjecutivo, reservas: pro
 
                 <div style={{ marginBottom: 20 }}>
                   <h4 style={{ fontSize: 12, color: tc.textMuted, marginBottom: 8, textTransform: 'uppercase' }}>Productos</h4>
-                  {reservaDetalle.items?.map((item: any) => (
-                    <div key={item.id} style={{
-                      display: 'flex', justifyContent: 'space-between', padding: '10px 0',
-                      borderBottom: `1px solid ${tc.border}`,
-                    }}>
-                      <div>
-                        <span style={{ color: tc.text }}>{item.producto_nombre}</span>
-                        <span style={{ color: tc.textMuted, fontSize: 12, marginLeft: 8 }}>
-                          x{item.cantidad} - ${item.precio_unitario?.toFixed(2)}
+                  {reservaDetalle.items?.map((item: any) => {
+                    const prodItem = storeProducts.find((p: any) => p.id === item.producto_id)
+                    return (
+                      <div key={item.id} style={{
+                        display: 'flex', justifyContent: 'space-between', padding: '10px 0',
+                        borderBottom: `1px solid ${tc.border}`, alignItems: 'center',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {prodItem?.images?.[0] && (
+                            <img src={prodItem.images[0]} alt={item.producto_nombre}
+                              style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                          )}
+                          <div>
+                            <span style={{ color: tc.text }}>{item.producto_nombre}</span>
+                            <span style={{ color: tc.textMuted, fontSize: 12, marginLeft: 8 }}>
+                              x{item.cantidad} - ${item.precio_unitario?.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <span style={{ color: tc.text, fontFamily: "'DM Mono',monospace" }}>
+                          ${item.subtotal?.toFixed(2)}
                         </span>
                       </div>
-                      <span style={{ color: tc.text, fontFamily: "'DM Mono',monospace" }}>
-                        ${item.subtotal?.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {reservaDetalle.comprobante_url && (

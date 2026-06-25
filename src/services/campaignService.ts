@@ -123,6 +123,7 @@ export async function mktCrearCampania(
   const { data: campania, error } = await sb
     .from('campanias')
     .insert({
+      codigo: campos.codigo || null,
       nombre: campos.nombre,
       descripcion: campos.descripcion || '',
       tipo: campos.tipo || 'PRECIO_FIJO',
@@ -159,7 +160,7 @@ export async function mktCrearCampania(
         precio_fijo: r.precio_fijo || 0,
         descuento_fijo: r.descuento_fijo || 0,
         envio_gratis: r.envio_gratis || false,
-        configuracion_json: r.configuracion_json || null,
+        configuracion_json: r.configuracion_json || {},
       }))
     )
   }
@@ -213,6 +214,7 @@ export async function mktActualizarCampania(
 
   // Actualizar campos base
   const updateData: Record<string, any> = {}
+  if (campos.codigo !== undefined) updateData.codigo = campos.codigo
   if (campos.nombre !== undefined) updateData.nombre = campos.nombre
   if (campos.descripcion !== undefined) updateData.descripcion = campos.descripcion
   if (campos.tipo !== undefined) updateData.tipo = campos.tipo
@@ -249,7 +251,7 @@ export async function mktActualizarCampania(
           precio_fijo: r.precio_fijo || 0,
           descuento_fijo: r.descuento_fijo || 0,
           envio_gratis: r.envio_gratis || false,
-          configuracion_json: r.configuracion_json || null,
+          configuracion_json: r.configuracion_json || {},
         }))
       )
     }

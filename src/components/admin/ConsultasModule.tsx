@@ -226,13 +226,25 @@ export default function ConsultasModule({ themeColors, isEjecutivo }: ConsultasM
             {/* Producto */}
             <div style={{ marginBottom: 16, padding: 16, background: tc.background, borderRadius: 12 }}>
               <p style={{ fontSize: 10, color: tc.primary, margin: '0 0 10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Producto consultado</p>
-              <p style={{ fontSize: 14, fontWeight: 600, color: tc.text, margin: 0 }}>
-                {storeProducts.find(p => p.id === consultaSeleccionada.product_id)?.name || consultaSeleccionada.producto_nombre || 'Producto #' + consultaSeleccionada.product_id}
-              </p>
-              <p style={{ fontSize: 11, color: tc.textMuted, margin: '4px 0 0', fontFamily: "'DM Mono',monospace" }}>
-                ID: {consultaSeleccionada.product_id}
-                {storeProducts.find(p => p.id === consultaSeleccionada.product_id)?.codigo && ` | Código: ${storeProducts.find(p => p.id === consultaSeleccionada.product_id)?.codigo}`}
-              </p>
+              {(() => {
+                const prod = storeProducts.find(p => p.id === consultaSeleccionada.product_id)
+                return (
+                  <>
+                    {prod?.images?.[0] && (
+                      <div style={{ marginBottom: 10, borderRadius: 8, overflow: 'hidden', maxHeight: 180 }}>
+                        <img src={prod.images[0]} alt={prod.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    )}
+                    <p style={{ fontSize: 14, fontWeight: 600, color: tc.text, margin: 0 }}>
+                      {prod?.name || consultaSeleccionada.producto_nombre || 'Producto #' + consultaSeleccionada.product_id}
+                    </p>
+                    <p style={{ fontSize: 11, color: tc.textMuted, margin: '4px 0 0', fontFamily: "'DM Mono',monospace" }}>
+                      ID: {consultaSeleccionada.product_id}
+                      {prod?.codigo && ` | Código: ${prod.codigo}`}
+                    </p>
+                  </>
+                )
+              })()}
             </div>
 
             {/* Cliente */}

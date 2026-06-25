@@ -5,6 +5,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '../../../../store'
 import { THEME_PRESETS, ThemeType, CatalogoSeccion } from '../../../../types'
 import {
@@ -28,6 +29,7 @@ export default function MarketingCampaignsPage() {
   const [editing, setEditing] = useState<MktCampania | null>(null)
   const [filtroCategoria, setFiltroCategoria] = useState<string>('')
   const [filtroEstado, setFiltroEstado] = useState<string>('')
+  const navigate = useNavigate()
   const [catalogos, setCatalogos] = useState<CatalogoSeccion[]>([])
 
   useEffect(() => {
@@ -153,6 +155,10 @@ export default function MarketingCampaignsPage() {
                     style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${c.estado === 'activo' ? '#ef4444' : '#22c55e'}`, background: 'transparent', color: c.estado === 'activo' ? '#ef4444' : '#22c55e', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                     {c.estado === 'activo' ? 'Desactivar' : 'Activar'}
                   </button>
+                  <button onClick={() => navigate(`/tienda/marketing/${c.id}`)}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 12 }}>
+                    Ver detalles
+                  </button>
                   <button onClick={() => { setEditing(c); setShowForm(true) }}
                     style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 12 }}>
                     Editar
@@ -182,8 +188,41 @@ export default function MarketingCampaignsPage() {
 }
 
 // ============================================================
-// FORMULARIO DE CAMPAÑA v2
+// FORMULARIO DE CAMPAÑA v3 — Diseño profesional por secciones
 // ============================================================
+
+type VisualPromoCard =
+  | 'DESCUENTO_PORCENTUAL'
+  | 'DESCUENTO_FIJO'
+  | 'PRECIO_ESPECIAL'
+  | 'COMPRA_X_LLEVA_Y'
+  | 'DOS_X_UNO'
+  | 'TRES_X_DOS'
+  | 'PACK_PROMOCIONAL'
+  | 'ENVIO_GRATIS'
+  | 'COMBINACION_COLORES'
+
+interface PromoCardDef {
+  key: VisualPromoCard
+  icon: string
+  title: string
+  desc: string
+  categoria: MktCategoriaCampania
+  tipo: MktTipoCampania
+  badgeColor: string
+}
+
+const PROMO_CARDS: PromoCardDef[] = [
+  { key: 'DESCUENTO_PORCENTUAL', icon: '🏷️', title: '% Descuento porcentual', desc: 'Porcentaje de descuento sobre el precio original', categoria: 'DESCUENTO', tipo: 'PORCENTAJE', badgeColor: '#3b82f6' },
+  { key: 'DESCUENTO_FIJO', icon: '💵', title: '$ Descuento fijo', desc: 'Valor fijo de descuento en la compra', categoria: 'OFERTA', tipo: 'MONTO_FIJO', badgeColor: '#f59e0b' },
+  { key: 'PRECIO_ESPECIAL', icon: '⭐', title: 'Precio especial', desc: 'Precio fijo reducido por grupo de productos', categoria: 'PROMOCION', tipo: 'PRECIO_FIJO', badgeColor: '#22c55e' },
+  { key: 'COMPRA_X_LLEVA_Y', icon: '🎁', title: 'Compra X lleva Y', desc: 'Lleva productos gratis al comprar una cantidad', categoria: 'PROMOCION', tipo: 'COMPRA_X_LLEVA_Y', badgeColor: '#8b5cf6' },
+  { key: 'DOS_X_UNO', icon: '2️⃣', title: '2x1', desc: 'Lleva 2 productos y paga solo 1', categoria: 'PROMOCION', tipo: 'COMPRA_X_LLEVA_Y', badgeColor: '#ec4899' },
+  { key: 'TRES_X_DOS', icon: '3️⃣', title: '3x2', desc: 'Lleva 3 productos y paga solo 2', categoria: 'PROMOCION', tipo: 'COMPRA_X_LLEVA_Y', badgeColor: '#ec4899' },
+  { key: 'PACK_PROMOCIONAL', icon: '📦', title: 'Pack promocional', desc: 'Precio especial por un conjunto de productos', categoria: 'PROMOCION', tipo: 'COMBO', badgeColor: '#06b6d4' },
+  { key: 'ENVIO_GRATIS', icon: '🚚', title: 'Envío gratis', desc: 'Sin costo de envío al cumplir el monto mínimo', categoria: 'OFERTA', tipo: 'ENVIO_GRATIS', badgeColor: '#059669' },
+  { key: 'COMBINACION_COLORES', icon: '🎨', title: 'Por combinación de colores', desc: 'Precio especial al combinar colores específicos', categoria: 'PROMOCION', tipo: 'PRECIO_FIJO', badgeColor: '#22c55e' },
+]
 
 function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, catalogos }: {
   campania: MktCampania | null
@@ -192,38 +231,72 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
   themeColors: any
   catalogos: CatalogoSeccion[]
 }) {
-  const [categoria, setCategoria] = useState<MktCategoriaCampania>(campania?.categoria || 'PROMOCION')
-  const [tipo, setTipo] = useState<MktTipoCampania>(campania?.tipo || 'PRECIO_FIJO')
+  const regla = campania?.reglas?.[0]
+  const reglaConfig = regla?.configuracion_json || {}
+
+  const deriveCardFromCampania = (): VisualPromoCard => {
+    if (!campania) return 'PRECIO_ESPECIAL'
+    const c = campania.categoria, t = campania.tipo, cfg = reglaConfig
+    if (t === 'PORCENTAJE') return 'DESCUENTO_PORCENTUAL'
+    if (t === 'MONTO_FIJO') return 'DESCUENTO_FIJO'
+    if (t === 'ENVIO_GRATIS') return 'ENVIO_GRATIS'
+    if (t === 'COMBO') return 'PACK_PROMOCIONAL'
+    if (t === 'COMPRA_X_LLEVA_Y') {
+      if (cfg.aplica_cada === 2 && cfg.gratis === 1) return 'DOS_X_UNO'
+      if (cfg.aplica_cada === 3 && cfg.gratis === 1) return 'TRES_X_DOS'
+      return 'COMPRA_X_LLEVA_Y'
+    }
+    if (cfg.promotion_rules || cfg.parear_color_tipo) return 'COMBINACION_COLORES'
+    return 'PRECIO_ESPECIAL'
+  }
+
   const [nombre, setNombre] = useState(campania?.nombre || '')
+  const [codigo, setCodigo] = useState(campania?.codigo || '')
   const [descripcion, setDescripcion] = useState(campania?.descripcion || '')
-  const [prioridad, setPrioridad] = useState(campania?.prioridad ?? 0)
   const [estado, setEstado] = useState<MktEstadoCampania>(campania?.estado || 'activo')
+  const [prioridad, setPrioridad] = useState(campania?.prioridad ?? 0)
+  const [fechaInicio, setFechaInicio] = useState(campania?.fecha_inicio ? campania.fecha_inicio.slice(0, 16) : '')
+  const [fechaFin, setFechaFin] = useState(campania?.fecha_fin ? campania.fecha_fin.slice(0, 16) : '')
+
+  const [selectedCard, setSelectedCard] = useState<VisualPromoCard>(deriveCardFromCampania)
+  const currentCard = PROMO_CARDS.find(c => c.key === selectedCard)!
+
   const [permiteAcumulacion, setPermiteAcumulacion] = useState(campania?.permite_acumulacion ?? true)
   const [esExclusiva, setEsExclusiva] = useState(campania?.es_exclusiva ?? false)
   const [catalogosExcluidos, setCatalogosExcluidos] = useState<string[]>(campania?.catalogos_excluidos || [])
-  const [fechaInicio, setFechaInicio] = useState(campania?.fecha_inicio ? campania.fecha_inicio.slice(0, 16) : '')
-  const [fechaFin, setFechaFin] = useState(campania?.fecha_fin ? campania.fecha_fin.slice(0, 16) : '')
-  const [saving, setSaving] = useState(false)
 
-  const regla = campania?.reglas?.[0]
   const [cantidadMinima, setCantidadMinima] = useState(regla?.cantidad_minima || 0)
   const [cantidadMaxima, setCantidadMaxima] = useState(regla?.cantidad_maxima || 0)
   const [montoMinimo, setMontoMinimo] = useState(regla?.monto_minimo || 0)
   const [porcentaje, setPorcentaje] = useState(regla?.porcentaje || 0)
   const [precioFijo, setPrecioFijo] = useState(regla?.precio_fijo || 0)
   const [descuentoFijo, setDescuentoFijo] = useState(regla?.descuento_fijo || 0)
-  const [envioGratis, setEnvioGratis] = useState(regla?.envio_gratis || false)
-  const [parearColorTipo, setParearColorTipo] = useState(regla?.configuracion_json?.parear_color_tipo ?? false)
+  const [envioGratisBeneficio, setEnvioGratisBeneficio] = useState(regla?.envio_gratis || false)
 
-  const existingRules = regla?.configuracion_json?.promotion_rules as PromotionRules | undefined
+  // --- Activation conditions ---
+  const [activarCantMin, setActivarCantMin] = useState(regla?.cantidad_minima ? regla.cantidad_minima > 0 : false)
+  const [activarMontoMin, setActivarMontoMin] = useState(regla?.monto_minimo ? regla.monto_minimo > 0 : false)
+  const [activarCombColor, setActivarCombColor] = useState(!!(reglaConfig.promotion_rules || reglaConfig.parear_color_tipo))
+
+  // --- Color combination rules ---
+  const existingRules = reglaConfig.promotion_rules as PromotionRules | undefined
   const [colorCombinationMode, setColorCombinationMode] = useState<PromotionRules['colorCombinationMode']>(existingRules?.colorCombinationMode || 'different')
   const [allowedCombinations, setAllowedCombinations] = useState<ColorPair[]>(existingRules?.allowedCombinations || [])
   const [blockedCombinations, setBlockedCombinations] = useState<ColorPair[]>(existingRules?.blockedCombinations || [])
 
-  const customPairEnabled = (pair: ColorPair) => {
-    if (allowedCombinations.length > 0) return allowedCombinations.includes(pair)
-    return !blockedCombinations.includes(pair)
-  }
+  const [saving, setSaving] = useState(false)
+
+  const cardsConCantidad = ['PRECIO_ESPECIAL', 'COMBINACION_COLORES', 'COMPRA_X_LLEVA_Y', 'DOS_X_UNO', 'TRES_X_DOS', 'PACK_PROMOCIONAL']
+  const cardsConPrecioFijo = ['PRECIO_ESPECIAL', 'COMBINACION_COLORES', 'PACK_PROMOCIONAL']
+  const cardsConPorcentaje = ['DESCUENTO_PORCENTUAL']
+  const cardsConDescuentoFijo = ['DESCUENTO_FIJO']
+  const cardsConEnvioGratis = ['ENVIO_GRATIS']
+
+  const needsCantidad = cardsConCantidad.includes(selectedCard)
+  const needsPrecioFijo = cardsConPrecioFijo.includes(selectedCard)
+  const needsPorcentaje = cardsConPorcentaje.includes(selectedCard)
+  const needsDescuentoFijo = cardsConDescuentoFijo.includes(selectedCard)
+  const needsEnvioGratis = cardsConEnvioGratis.includes(selectedCard)
 
   const toggleCustomPair = (pair: ColorPair) => {
     if (allowedCombinations.length > 0) {
@@ -247,41 +320,58 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
     }
   }
 
-  // Filtros
-  const filtrosExistentes = campania?.filtros || []
-  const [filtroCampo, setFiltroCampo] = useState(filtrosExistentes[0]?.campo || 'color_tipo')
-  const [filtroOperador, setFiltroOperador] = useState(filtrosExistentes[0]?.operador || 'IN')
-  const [filtroValor, setFiltroValor] = useState(filtrosExistentes.map(f => f.valor).join(', '))
-
-  const mostrarFiltro = categoria === 'PROMOCION' || categoria === 'DESCUENTO' || categoria === 'OFERTA' || categoria === 'TEMPORADA'
-  const mostrarCantidades = tipo === 'PRECIO_FIJO' || tipo === 'COMBO' || tipo === 'COMPRA_X_LLEVA_Y'
-  const mostrarPorcentaje = tipo === 'PORCENTAJE'
-  const mostrarPrecioFijo = tipo === 'PRECIO_FIJO' || tipo === 'COMBO'
-  const mostrarEnvioGratis = tipo === 'ENVIO_GRATIS'
+  const preview = (() => {
+    const lines: string[] = []
+    lines.push(`Nombre: ${nombre || '—'}`)
+    lines.push(`Tipo: ${currentCard.title}`)
+    if (activarCombColor && currentCard.tipo !== 'ENVIO_GRATIS') {
+      const modeLabels: Record<string, string> = {
+        different: 'Colores diferentes (color+oscuro, color+negro)',
+        same: 'Colores iguales (mismo grupo)',
+        custom: `${allowedCombinations.length} combinaciones permitidas`,
+      }
+      lines.push(`Combinación: ${modeLabels[colorCombinationMode] || '—'}`)
+    }
+    if (activarCantMin && cantidadMinima > 0) lines.push(`Mínimo: ${cantidadMinima} producto(s)`)
+    if (activarMontoMin && montoMinimo > 0) lines.push(`Compra mín: $${montoMinimo.toFixed(2)}`)
+    if (needsPorcentaje) lines.push(`Beneficio: ${porcentaje}% de descuento`)
+    else if (needsDescuentoFijo) lines.push(`Beneficio: $${descuentoFijo.toFixed(2)} de descuento`)
+    else if (needsPrecioFijo) lines.push(`Beneficio: Precio especial $${precioFijo.toFixed(2)}`)
+    else if (needsEnvioGratis) lines.push(`Beneficio: Envío gratis${montoMinimo > 0 ? ` (mín $${montoMinimo.toFixed(2)})` : ''}`)
+    lines.push(`Estado: ${estado === 'activo' ? '✅ Activa' : estado === 'inactivo' ? '❌ Inactiva' : '📝 Borrador'}`)
+    return lines
+  })()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!nombre.trim()) return
     setSaving(true)
 
-    const filtrosValidos = (filtroValor.trim() && mostrarFiltro)
-      ? [{
-          campo: filtroCampo,
-          operador: filtroOperador as any,
-          valor: filtroValor,
-        }]
-      : []
+    const configJson: Record<string, any> = {
+      ...(activarCombColor ? {
+        parear_color_tipo: true,
+        promotion_rules: {
+          colorCombinationMode,
+          allowedCombinations: colorCombinationMode === 'custom' ? allowedCombinations : [],
+          blockedCombinations: colorCombinationMode === 'custom' ? blockedCombinations : [],
+        } satisfies PromotionRules,
+      } : {}),
+    }
 
-    const promotionRules: PromotionRules = {
-      colorCombinationMode,
-      allowedCombinations: colorCombinationMode === 'custom' ? allowedCombinations : [],
-      blockedCombinations: colorCombinationMode === 'custom' ? blockedCombinations : [],
+    if (selectedCard === 'DOS_X_UNO') {
+      configJson.aplica_cada = 2
+      configJson.gratis = 1
+    } else if (selectedCard === 'TRES_X_DOS') {
+      configJson.aplica_cada = 3
+      configJson.gratis = 1
     }
 
     await onSave({
       nombre,
+      codigo: codigo || undefined,
       descripcion,
-      tipo,
-      categoria,
+      tipo: currentCard.tipo,
+      categoria: currentCard.categoria,
       estado,
       prioridad,
       permite_acumulacion: permiteAcumulacion,
@@ -290,21 +380,18 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
       fecha_inicio: fechaInicio ? new Date(fechaInicio).toISOString() : null,
       fecha_fin: fechaFin ? new Date(fechaFin).toISOString() : null,
       reglas: [{
-        tipo_regla: tipo,
-        cantidad_minima: cantidadMinima,
+        tipo_regla: currentCard.tipo,
+        cantidad_minima: (activarCantMin && cantidadMinima > 0) ? cantidadMinima : 0,
         cantidad_maxima: cantidadMaxima,
-        monto_minimo: montoMinimo,
+        monto_minimo: (activarMontoMin && montoMinimo > 0) ? montoMinimo : 0,
         monto_maximo: 0,
         porcentaje: porcentaje,
         precio_fijo: precioFijo,
         descuento_fijo: descuentoFijo,
-        envio_gratis: envioGratis,
-        configuracion_json: {
-          parear_color_tipo: parearColorTipo,
-          promotion_rules: promotionRules,
-        },
+        envio_gratis: envioGratisBeneficio,
+        configuracion_json: configJson,
       }],
-      filtros: filtrosValidos,
+      filtros: [],
     })
     setSaving(false)
   }
@@ -316,326 +403,382 @@ function MarketingCampaignForm({ campania, onSave, onClose, themeColors: tc, cat
 
   const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: tc.text, marginBottom: 4, display: 'block' }
 
+  const sectionTitle: React.CSSProperties = {
+    fontSize: 14, fontWeight: 700, color: tc.text,
+    marginBottom: 12, paddingBottom: 8,
+    borderBottom: `2px solid ${tc.border}`,
+    display: 'flex', alignItems: 'center', gap: 8,
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}>
       <form onSubmit={handleSubmit} style={{
-        background: '#fff', borderRadius: 16, padding: 32, width: 560, maxWidth: '90vw',
-        maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        background: '#fff', borderRadius: 16, padding: 32, width: 640, maxWidth: '95vw',
+        maxHeight: '94vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       }}>
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: tc.text }}>
-            {campania ? 'Editar Campaña' : 'Nueva Campaña'}
-          </h2>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: tc.textMuted }}>×</button>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: tc.text }}>
+              {campania ? 'Editar Campaña' : 'Nueva Campaña'}
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: tc.textMuted }}>Configura todos los detalles de la promoción</p>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, color: tc.textMuted, lineHeight: 1 }}>×</button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={labelStyle}>Nombre</label>
-            <input value={nombre} onChange={e => setNombre(e.target.value)} required style={inputStyle} placeholder="Ej: 2x22 Oscuros" />
+        {/* ===== SECCIÓN 1: INFORMACIÓN GENERAL ===== */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={sectionTitle}>
+            <span>📋</span> Información general
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Categoría</label>
-              <select value={categoria} onChange={e => setCategoria(e.target.value as MktCategoriaCampania)} style={inputStyle}>
-                {Object.entries(MKT_CATEGORIA_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Nombre de la promoción *</label>
+                <input value={nombre} onChange={e => setNombre(e.target.value)} required style={inputStyle} placeholder="Ej: 2x$28 Colores" />
+              </div>
+              <div>
+                <label style={labelStyle}>Código promocional</label>
+                <input value={codigo} onChange={e => setCodigo(e.target.value)} style={inputStyle} placeholder="Ej: PROMO28" />
+              </div>
             </div>
             <div>
-              <label style={labelStyle}>Tipo de regla</label>
-              <select value={tipo} onChange={e => setTipo(e.target.value as MktTipoCampania)} style={inputStyle}>
-                {Object.entries(MKT_TIPO_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
+              <label style={labelStyle}>Descripción</label>
+              <input value={descripcion} onChange={e => setDescripcion(e.target.value)} style={inputStyle} placeholder="Describe brevemente la promoción (opcional)" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Estado</label>
+                <select value={estado} onChange={e => setEstado(e.target.value as MktEstadoCampania)} style={inputStyle}>
+                  <option value="activo">✅ Activa</option>
+                  <option value="inactivo">❌ Inactiva</option>
+                  <option value="borrador">📝 Borrador</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Prioridad</label>
+                <input type="number" value={prioridad} onChange={e => setPrioridad(Number(e.target.value))} style={inputStyle} min={0} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tc.text, cursor: 'pointer', padding: '8px 0' }}>
+                  <input type="checkbox" checked={permiteAcumulacion} onChange={e => setPermiteAcumulacion(e.target.checked)} />
+                  Acumulable
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tc.text, cursor: 'pointer', padding: '8px 0' }}>
+                  <input type="checkbox" checked={esExclusiva} onChange={e => { setEsExclusiva(e.target.checked); if (e.target.checked) setPermiteAcumulacion(false) }} />
+                  Exclusiva
+                </label>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Fecha inicio</label>
+                <input type="datetime-local" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Fecha fin</label>
+                <input type="datetime-local" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={inputStyle} />
+              </div>
             </div>
           </div>
+        </div>
 
-          <div>
-            <label style={labelStyle}>Descripción</label>
-            <input value={descripcion} onChange={e => setDescripcion(e.target.value)} style={inputStyle} placeholder="Descripción opcional" />
+        {/* ===== SECCIÓN 2: TIPO DE PROMOCIÓN ===== */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={sectionTitle}>
+            <span>🎯</span> Tipo de promoción
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Prioridad</label>
-              <input type="number" value={prioridad} onChange={e => setPrioridad(Number(e.target.value))} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Estado</label>
-              <select value={estado} onChange={e => setEstado(e.target.value as MktEstadoCampania)} style={inputStyle}>
-                <option value="activo">Activo</option>
-                <option value="inactivo">Inactivo</option>
-                <option value="borrador">Borrador</option>
-              </select>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+            {PROMO_CARDS.map(card => {
+              const isSelected = selectedCard === card.key
+              return (
+                <button
+                  type="button"
+                  key={card.key}
+                  onClick={() => setSelectedCard(card.key)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
+                    padding: '12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                    border: `2px solid ${isSelected ? card.badgeColor : tc.border}`,
+                    background: isSelected ? `${card.badgeColor}08` : '#fff',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>{card.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: tc.text, lineHeight: 1.3 }}>{card.title}</span>
+                  <span style={{ fontSize: 10, color: tc.textMuted, lineHeight: 1.3 }}>{card.desc}</span>
+                </button>
+              )
+            })}
           </div>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Fecha inicio</label>
-              <input type="datetime-local" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
+        {/* ===== SECCIÓN 3: CONDICIONES DE ACTIVACIÓN ===== */}
+        {(selectedCard !== 'ENVIO_GRATIS') && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={sectionTitle}>
+              <span>⚡</span> Condiciones de activación
             </div>
-            <div>
-              <label style={labelStyle}>Fecha fin</label>
-              <input type="datetime-local" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={inputStyle} />
-            </div>
-          </div>
-
-          {/* Flags */}
-          <div style={{ display: 'flex', gap: 16, padding: '12px', background: '#f9fafb', borderRadius: 8 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: tc.text, cursor: 'pointer' }}>
-              <input type="checkbox" checked={permiteAcumulacion} onChange={e => setPermiteAcumulacion(e.target.checked)} />
-              Permitir acumulación
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: tc.text, cursor: 'pointer' }}>
-              <input type="checkbox" checked={esExclusiva} onChange={e => { setEsExclusiva(e.target.checked); if (e.target.checked) setPermiteAcumulacion(false) }} />
-              Exclusiva (bloquea otras campañas)
-            </label>
-            {(mostrarCantidades || mostrarPrecioFijo) && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: tc.text, cursor: 'pointer' }}>
-                <input type="checkbox" checked={parearColorTipo} onChange={e => setParearColorTipo(e.target.checked)} />
-                Forzar pares color/oscuro
+            <p style={{ fontSize: 11, color: tc.textMuted, margin: '-8px 0 12px' }}>
+              ¿Cuándo aplica la promoción? Selecciona las condiciones necesarias.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {needsCantidad && (
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                  background: activarCantMin ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${activarCantMin ? '#22c55e' : tc.border}`,
+                }}>
+                  <input type="checkbox" checked={activarCantMin} onChange={e => setActivarCantMin(e.target.checked)} />
+                  Cantidad mínima de productos
+                </label>
+              )}
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: activarMontoMin ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${activarMontoMin ? '#22c55e' : tc.border}`,
+              }}>
+                <input type="checkbox" checked={activarMontoMin} onChange={e => setActivarMontoMin(e.target.checked)} />
+                Monto mínimo de compra
               </label>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: activarCombColor ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${activarCombColor ? '#22c55e' : tc.border}`,
+              }}>
+                <input type="checkbox" checked={activarCombColor} onChange={e => setActivarCombColor(e.target.checked)} />
+                Combinación de colores
+              </label>
+            </div>
+
+            {activarCantMin && (
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Cantidad mínima</label>
+                  <input type="number" value={cantidadMinima} onChange={e => setCantidadMinima(Number(e.target.value))} min={1} style={inputStyle} placeholder="Ej: 2" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Cantidad máxima</label>
+                  <input type="number" value={cantidadMaxima} onChange={e => setCantidadMaxima(Number(e.target.value))} min={0} style={inputStyle} placeholder="0 = sin límite" />
+                </div>
+              </div>
+            )}
+            {activarMontoMin && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Monto mínimo de compra ($)</label>
+                <input type="number" value={montoMinimo} onChange={e => setMontoMinimo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} placeholder="Ej: 50" />
+              </div>
             )}
           </div>
+        )}
 
-          {/* Catálogos excluidos */}
-          <div style={{ borderTop: `1px solid ${tc.border}`, paddingTop: 16, borderBottom: `1px solid ${tc.border}`, paddingBottom: 16 }}>
-            <label style={labelStyle}>Excluir catálogos</label>
-            <p style={{ fontSize: 11, color: tc.textMuted, margin: '2px 0 8px' }}>
-              Los productos de estos catálogos NO recibirán el descuento
+        {/* ===== SECCIÓN 4: REGLAS DE COMBINACIÓN DE COLORES ===== */}
+        {activarCombColor && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={sectionTitle}>
+              <span>🎨</span> Reglas de combinación de colores
+            </div>
+            <p style={{ fontSize: 11, color: tc.textMuted, margin: '-8px 0 12px' }}>
+              Configura cómo deben combinarse los tipos de color para aplicar la promoción.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflow: 'auto' }}>
-              {catalogos.map(cat => {
-                const selected = catalogosExcluidos.includes(cat.id)
-                return (
-                  <label key={cat.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                    padding: '6px 10px', borderRadius: 6,
-                    background: selected ? '#fef2f2' : '#f9fafb',
-                    border: `1px solid ${selected ? '#f87171' : tc.border}`,
-                    fontSize: 13, color: tc.text,
-                  }}>
-                    <input type="checkbox" checked={selected} onChange={() => {
-                      setCatalogosExcluidos(prev =>
-                        selected ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Different */}
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: colorCombinationMode === 'different' ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${colorCombinationMode === 'different' ? '#22c55e' : tc.border}`,
+              }}>
+                <input type="radio" name="colorMode" checked={colorCombinationMode === 'different'}
+                  onChange={() => setColorCombinationMode('different')} style={{ marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: tc.text }}>Colores diferentes</span>
+                  <p style={{ margin: '2px 0 4px', fontSize: 11, color: tc.textMuted }}>
+                    La promoción solo aplica cuando los productos son de grupos de color diferentes.
+                  </p>
+                  <div style={{ fontSize: 10, color: '#6b7280', display: 'flex', gap: 12 }}>
+                    <span style={{ color: '#059669' }}>✔ Color + Negro</span>
+                    <span style={{ color: '#059669' }}>✔ Color + Oscuro</span>
+                    <span style={{ color: '#ef4444' }}>✖ Negro + Negro</span>
+                    <span style={{ color: '#ef4444' }}>✖ Color + Color</span>
+                  </div>
+                </div>
+              </label>
+
+              {/* Same */}
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: colorCombinationMode === 'same' ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${colorCombinationMode === 'same' ? '#22c55e' : tc.border}`,
+              }}>
+                <input type="radio" name="colorMode" checked={colorCombinationMode === 'same'}
+                  onChange={() => setColorCombinationMode('same')} style={{ marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: tc.text }}>Colores iguales</span>
+                  <p style={{ margin: '2px 0 4px', fontSize: 11, color: tc.textMuted }}>
+                    La promoción solo aplica cuando ambos productos pertenecen al mismo grupo de color.
+                  </p>
+                  <div style={{ fontSize: 10, color: '#6b7280', display: 'flex', gap: 12 }}>
+                    <span style={{ color: '#059669' }}>✔ Negro + Negro</span>
+                    <span style={{ color: '#059669' }}>✔ Oscuro + Oscuro</span>
+                    <span style={{ color: '#059669' }}>✔ Color + Color</span>
+                    <span style={{ color: '#ef4444' }}>✖ Color + Negro</span>
+                  </div>
+                </div>
+              </label>
+
+              {/* Custom */}
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: colorCombinationMode === 'custom' ? '#f0fdf4' : '#f9fafb',
+                border: `1px solid ${colorCombinationMode === 'custom' ? '#22c55e' : tc.border}`,
+              }}>
+                <input type="radio" name="colorMode" checked={colorCombinationMode === 'custom'}
+                  onChange={() => setColorCombinationMode('custom')} style={{ marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: tc.text }}>Combinación personalizada</span>
+                  <p style={{ margin: '2px 0 4px', fontSize: 11, color: tc.textMuted }}>
+                    Selecciona exactamente qué combinaciones están permitidas.
+                  </p>
+                </div>
+              </label>
+
+              {colorCombinationMode === 'custom' && (
+                <div style={{
+                  padding: 12, borderRadius: 8,
+                  background: '#f9fafb', border: `1px solid ${tc.border}`,
+                }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <button type="button" onClick={() => switchCustomMode(true)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, border: `1px solid ${allowedCombinations.length > 0 ? '#22c55e' : tc.border}`,
+                        background: allowedCombinations.length > 0 ? '#f0fdf4' : 'transparent',
+                        color: allowedCombinations.length > 0 ? '#059669' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                      }}>
+                      Permitir seleccionadas
+                    </button>
+                    <button type="button" onClick={() => switchCustomMode(false)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, border: `1px solid ${blockedCombinations.length > 0 ? '#ef4444' : tc.border}`,
+                        background: blockedCombinations.length > 0 ? '#fef2f2' : 'transparent',
+                        color: blockedCombinations.length > 0 ? '#ef4444' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                      }}>
+                      Bloquear seleccionadas
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {ALL_COLOR_PAIRS.map(pair => {
+                      const enabled = allowedCombinations.length > 0
+                        ? allowedCombinations.includes(pair)
+                        : !blockedCombinations.includes(pair)
+                      return (
+                        <label key={pair} style={{
+                          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                          padding: '4px 8px', borderRadius: 6,
+                          background: enabled ? '#f0fdf4' : '#fef2f2',
+                          fontSize: 12, color: tc.text,
+                        }}>
+                          <input type="checkbox" checked={enabled} onChange={() => toggleCustomPair(pair)} />
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: enabled ? '#22c55e' : '#ef4444', display: 'inline-block' }} />
+                          {COLOR_PAIR_LABELS[pair]}
+                        </label>
                       )
-                    }} />
-                    {cat.nombre}
-                  </label>
-                )
-              })}
-              {catalogos.length === 0 && (
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>No hay catálogos disponibles</span>
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           </div>
+        )}
 
-          {/* Filtros */}
-          {mostrarFiltro && (
-            <div style={{ borderTop: `1px solid ${tc.border}`, paddingTop: 16, borderBottom: `1px solid ${tc.border}`, paddingBottom: 16 }}>
-              <label style={labelStyle}>Filtrar productos</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={filtroCampo} onChange={e => setFiltroCampo(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-                    <option value="color_tipo">Tipo de color</option>
-                    <option value="color">Color</option>
-                    <option value="category">Categoría</option>
-                    <option value="modelo">Modelo</option>
-                    <option value="coleccion">Colección</option>
-                  </select>
-                  <select value={filtroOperador} onChange={e => setFiltroOperador(e.target.value as any)} style={{ ...inputStyle, width: 80 }}>
-                    <option value="IN">IN</option>
-                    <option value="=">=</option>
-                    <option value="!=">!=</option>
-                    <option value="NOT IN">NOT IN</option>
-                  </select>
-                </div>
-                <input value={filtroValor} onChange={e => setFiltroValor(e.target.value)} style={inputStyle}
-                  placeholder="Ej: claro, beige, blanco (separados por coma)" />
-              </div>
-            </div>
-          )}
-
-          {/* Condiciones de combinación */}
-          {(mostrarCantidades || mostrarPrecioFijo) && (
-            <div style={{
-              borderTop: `1px solid ${tc.border}`, paddingTop: 16,
-              borderBottom: `1px solid ${tc.border}`, paddingBottom: 16,
-            }}>
-              <label style={labelStyle}>Condiciones de combinación</label>
-              <p style={{ fontSize: 11, color: tc.textMuted, margin: '2px 0 8px' }}>
-                Configura cómo se deben combinar los tipos de color en los pares de esta promoción
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
-                  background: colorCombinationMode === 'different' ? '#f0fdf4' : '#f9fafb',
-                  border: `1px solid ${colorCombinationMode === 'different' ? '#22c55e' : tc.border}`,
-                }}>
-                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'different'}
-                    onChange={() => setColorCombinationMode('different')} />
-                  <div>
-                    <span style={{ fontWeight: 500, color: tc.text }}>Permitir únicamente colores diferentes</span>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
-                      color + negro, color + oscuro (ej: 1 prenda de color + 1 oscura/negra)
-                    </p>
-                  </div>
-                </label>
-
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
-                  background: colorCombinationMode === 'same' ? '#f0fdf4' : '#f9fafb',
-                  border: `1px solid ${colorCombinationMode === 'same' ? '#22c55e' : tc.border}`,
-                }}>
-                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'same'}
-                    onChange={() => setColorCombinationMode('same')} />
-                  <div>
-                    <span style={{ fontWeight: 500, color: tc.text }}>Permitir únicamente colores iguales</span>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
-                      color + color, oscuro + oscuro, negro + negro (mismo grupo de color)
-                    </p>
-                  </div>
-                </label>
-
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                  borderRadius: 8, cursor: 'pointer', fontSize: 13,
-                  background: colorCombinationMode === 'custom' ? '#f0fdf4' : '#f9fafb',
-                  border: `1px solid ${colorCombinationMode === 'custom' ? '#22c55e' : tc.border}`,
-                }}>
-                  <input type="radio" name="colorMode" checked={colorCombinationMode === 'custom'}
-                    onChange={() => setColorCombinationMode('custom')} />
-                  <div>
-                    <span style={{ fontWeight: 500, color: tc.text }}>Personalizar combinaciones permitidas</span>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: tc.textMuted }}>
-                      Selecciona manualmente las combinaciones válidas
-                    </p>
-                  </div>
-                </label>
-
-                {colorCombinationMode === 'custom' && (
-                  <div style={{
-                    marginTop: 8, padding: 12, borderRadius: 8,
-                    background: '#f9fafb', border: `1px solid ${tc.border}`,
-                  }}>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <button type="button" onClick={() => switchCustomMode(true)}
-                        style={{
-                          padding: '4px 10px', borderRadius: 6, border: `1px solid ${allowedCombinations.length > 0 ? '#22c55e' : tc.border}`,
-                          background: allowedCombinations.length > 0 ? '#f0fdf4' : 'transparent',
-                          color: allowedCombinations.length > 0 ? '#059669' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                        }}>
-                        Permitir seleccionadas
-                      </button>
-                      <button type="button" onClick={() => switchCustomMode(false)}
-                        style={{
-                          padding: '4px 10px', borderRadius: 6, border: `1px solid ${blockedCombinations.length > 0 ? '#ef4444' : tc.border}`,
-                          background: blockedCombinations.length > 0 ? '#fef2f2' : 'transparent',
-                          color: blockedCombinations.length > 0 ? '#ef4444' : tc.text, cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                        }}>
-                        Bloquear seleccionadas
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {ALL_COLOR_PAIRS.map(pair => {
-                        const enabled = allowedCombinations.length > 0
-                          ? allowedCombinations.includes(pair)
-                          : !blockedCombinations.includes(pair)
-                        return (
-                          <label key={pair} style={{
-                            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                            padding: '4px 8px', borderRadius: 6,
-                            background: enabled ? '#f0fdf4' : '#fef2f2',
-                            fontSize: 13, color: tc.text,
-                          }}>
-                            <input type="checkbox" checked={enabled}
-                              onChange={() => toggleCustomPair(pair)} />
-                            <span style={{
-                              width: 8, height: 8, borderRadius: '50%',
-                              background: enabled ? '#22c55e' : '#ef4444',
-                              display: 'inline-block',
-                            }} />
-                            {COLOR_PAIR_LABELS[pair]}
-                          </label>
-                        )
-                      })}
-                    </div>
-                    <div style={{ fontSize: 11, color: tc.textMuted, marginTop: 6 }}>
-                      {allowedCombinations.length > 0
-                        ? `${allowedCombinations.length} combinaciones permitidas`
-                        : blockedCombinations.length > 0
-                          ? `${blockedCombinations.length} combinaciones bloqueadas`
-                          : 'Todas las combinaciones permitidas'}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Reglas */}
-          <div style={{ borderTop: `1px solid ${tc.border}`, paddingTop: 16 }}>
-            <label style={labelStyle}>Reglas</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-              {mostrarCantidades && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Cantidad mínima</label>
-                    <input type="number" value={cantidadMinima} onChange={e => setCantidadMinima(Number(e.target.value))} min={0} style={inputStyle} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Cantidad máxima</label>
-                    <input type="number" value={cantidadMaxima} onChange={e => setCantidadMaxima(Number(e.target.value))} min={0} style={inputStyle} />
-                  </div>
-                </div>
-              )}
-
-              {mostrarPrecioFijo && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Precio fijo ($)</label>
-                    <input type="number" value={precioFijo} onChange={e => setPrecioFijo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Descuento fijo ($)</label>
-                    <input type="number" value={descuentoFijo} onChange={e => setDescuentoFijo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} />
-                  </div>
-                </div>
-              )}
-
-              {mostrarPorcentaje && (
-                <div>
-                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Porcentaje (%)</label>
-                  <input type="number" value={porcentaje} onChange={e => setPorcentaje(Number(e.target.value))} min={0} max={100} style={inputStyle} />
-                </div>
-              )}
-
+        {/* ===== SECCIÓN 5: BENEFICIO ===== */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={sectionTitle}>
+            <span>🎁</span> Beneficio
+          </div>
+          <p style={{ fontSize: 11, color: tc.textMuted, margin: '-8px 0 12px' }}>
+            ¿Qué recibe el cliente?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {needsPorcentaje && (
               <div>
-                <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Monto mínimo ($)</label>
-                <input type="number" value={montoMinimo} onChange={e => setMontoMinimo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} />
+                <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Porcentaje de descuento (%)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="number" value={porcentaje} onChange={e => setPorcentaje(Number(e.target.value))} min={0} max={100} style={inputStyle} placeholder="Ej: 30" />
+                  <span style={{ fontSize: 13, color: tc.text, fontWeight: 600 }}>%</span>
+                </div>
               </div>
-
-              {mostrarEnvioGratis && (
+            )}
+            {needsDescuentoFijo && (
+              <div>
+                <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Valor de descuento ($)</label>
+                <input type="number" value={descuentoFijo} onChange={e => setDescuentoFijo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} placeholder="Ej: 10" />
+              </div>
+            )}
+            {needsPrecioFijo && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Precio especial ($)</label>
+                  <input type="number" value={precioFijo} onChange={e => setPrecioFijo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} placeholder="Ej: 28" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>{needsCantidad ? 'Cant. por grupo' : 'Cantidad'}</label>
+                  <input type="number" value={cantidadMinima} onChange={e => setCantidadMinima(Number(e.target.value))} min={1} style={inputStyle} placeholder="Ej: 2" />
+                </div>
+              </div>
+            )}
+            {needsEnvioGratis && (
+              <div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: tc.text, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={envioGratis} onChange={e => setEnvioGratis(e.target.checked)} />
+                  <input type="checkbox" checked={envioGratisBeneficio} onChange={e => setEnvioGratisBeneficio(e.target.checked)} />
                   Envío gratis
                 </label>
-              )}
-            </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ fontSize: 11, color: tc.textMuted, display: 'block' }}>Monto mínimo para envío gratis ($)</label>
+                  <input type="number" value={montoMinimo} onChange={e => setMontoMinimo(Number(e.target.value))} min={0} step={0.01} style={inputStyle} placeholder="0 = sin mínimo" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
-          <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
-          <button type="submit" disabled={saving} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: tc.primary, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+        {/* ===== SECCIÓN 6: PREVISUALIZACIÓN ===== */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={sectionTitle}>
+            <span>👁️</span> Previsualización
+          </div>
+          <div style={{
+            padding: 16, borderRadius: 10,
+            background: '#f9fafb', border: `1px solid ${tc.border}`,
+            fontSize: 12, color: tc.text, lineHeight: 1.8,
+          }}>
+            {preview.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+            {!nombre.trim() && (
+              <div style={{ color: '#ef4444', marginTop: 4 }}>⚠️ Completa el nombre para guardar</div>
+            )}
+          </div>
+        </div>
+
+        {/* ===== ACCIONES ===== */}
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${tc.border}` }}>
+          <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${tc.border}`, background: 'transparent', color: tc.text, cursor: 'pointer', fontSize: 13 }}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={saving || !nombre.trim()} style={{
+            padding: '10px 24px', borderRadius: 10, border: 'none',
+            background: tc.primary, color: '#fff', fontWeight: 600,
+            cursor: (saving || !nombre.trim()) ? 'not-allowed' : 'pointer',
+            fontSize: 13, opacity: (saving || !nombre.trim()) ? 0.6 : 1,
+          }}>
             {saving ? 'Guardando...' : (campania ? 'Guardar Cambios' : 'Crear Campaña')}
           </button>
         </div>

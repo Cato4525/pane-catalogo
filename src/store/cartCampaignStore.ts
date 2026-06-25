@@ -9,7 +9,7 @@ import { persist } from 'zustand/middleware'
 import { Product } from '../types'
 import { MktCartItem, MktCampania, MktResultadoEngine, MktResultadoMultiples } from '../types/marketing'
 import { mktEvaluar } from '../services/promotionEngine'
-import { validatePromotionRules, ValidatePromotionItem } from '../services/promotionValidator'
+import { validatePromotionRules, ValidatePromotionItem, getCartColorTypesTip } from '../services/promotionValidator'
 
 function calcularMensajePromo(items: MktCartItem[], campania: MktCampania | null): string {
   if (!campania) return ''
@@ -27,10 +27,12 @@ function calcularMensajePromo(items: MktCartItem[], campania: MktCampania | null
     }))
     const result = validatePromotionRules(rules, validateItems)
     if (result.valid) {
-      if (rules.colorCombinationMode === 'different') return '✅ Pares color/oscuro completos'
+      if (rules.colorCombinationMode === 'different') return '✅ Pares de colores diferentes completos'
       if (rules.colorCombinationMode === 'same') return '✅ Productos del mismo grupo de color'
       return '✅ Combinaciones válidas'
     }
+    const tip = getCartColorTypesTip(validateItems, rules)
+    if (tip) return `💡 ${tip}`
     return result.message ? `⚠️ ${result.message}` : ''
   }
 

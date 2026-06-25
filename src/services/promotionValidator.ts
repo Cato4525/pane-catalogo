@@ -82,9 +82,14 @@ export function validatePromotionRules(
       const blackCount = tipos.filter(t => t === COLOR_TIPO_BLACK).length
 
       if (tiposSet.size < 2) {
+        const soloTipo = [...tiposSet][0]
+        const label = soloTipo === COLOR_TIPO_COLOR ? 'color'
+          : soloTipo === COLOR_TIPO_DARK ? 'oscuro'
+          : soloTipo === COLOR_TIPO_BLACK ? 'negro'
+          : soloTipo
         return {
           valid: false,
-          message: 'Esta promoción requiere productos de diferentes tipos de color (ej: color + oscuro).',
+          message: `Son productos con el mismo tipo de color (${label}), no aplica a la promoción. Cambie cualquier producto por un color diferente para aplicar a la promoción.`,
         }
       }
 
@@ -184,6 +189,38 @@ export interface Validate2x28Result {
   valid: boolean
   message?: string
   discountAmount?: number
+}
+
+export function getCartColorTypesTip(
+  items: ValidatePromotionItem[],
+  rules: PromotionRules | null | undefined
+): string | null {
+  if (!rules || rules.colorCombinationMode !== 'different') return null
+
+  const flat: ValidatePromotionItem[] = []
+  for (const item of items) {
+    for (let i = 0; i < item.quantity; i++) {
+      flat.push({ ...item, quantity: 1 })
+    }
+  }
+
+  const tipos = [...new Set(flat.map(i => getColorTipoCategory(i.colorTipo)).filter(Boolean))]
+
+  if (tipos.length === 0) return null
+  if (tipos.length >= 2) return null
+
+  const soloTipo = tipos[0]
+  const label = soloTipo === COLOR_TIPO_COLOR ? 'color'
+    : soloTipo === COLOR_TIPO_DARK ? 'oscuro'
+    : soloTipo === COLOR_TIPO_BLACK ? 'negro'
+    : soloTipo
+
+  const suggestions = [COLOR_TIPO_COLOR, COLOR_TIPO_DARK, COLOR_TIPO_BLACK]
+    .filter(t => t !== soloTipo)
+    .map(t => t === COLOR_TIPO_COLOR ? 'color' : t === COLOR_TIPO_DARK ? 'oscuro' : 'negro')
+    .join(' o ')
+
+  return `Ya agregaste un producto ${label}. Elige un producto de diferente tipo (${suggestions}) para aplicar la promoción.`
 }
 
 export function validate2x28Promotion(items: Validate2x28Item[]): Validate2x28Result {

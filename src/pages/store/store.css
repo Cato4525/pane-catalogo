@@ -150,8 +150,8 @@
 .v-pcard::after{content:'';position:absolute;top:-50%;left:-50%;width:50%;height:200%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg) translateX(-200%);transition:transform .6s var(--ease-silk);z-index:3;pointer-events:none}
 .v-pcard:hover::after{transform:skewX(-20deg) translateX(500%)}
 
-.v-pimg{height:330px;position:relative;overflow:hidden;background:var(--petal)}
-@media(max-width:600px){.v-pimg{height:180px!important}}
+.v-pimg{height:380px;position:relative;overflow:hidden;background:var(--petal)}
+@media(max-width:600px){.v-pimg{height:200px!important}}
 .v-pplaceholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--petal),var(--blush))}
 .v-pplaceholder img{width:100%;height:100%;object-fit:cover;transition:transform .5s var(--ease-silk)}
 .v-pcard:hover .v-pplaceholder img{transform:scale(1.05)}

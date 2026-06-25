@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Campania, Product, CarritoPromocionItem, Cliente, ABONO_MINIMO } from '../types'
 import { calcularPromocion } from '../services/promocionesService'
-import { validate2x28Promotion, Validate2x28Item, validatePromotionRules, ValidatePromotionItem } from '../services/promotionValidator'
+import { validate2x28Promotion, Validate2x28Item, validatePromotionRules, ValidatePromotionItem, getCartColorTypesTip } from '../services/promotionValidator'
 import supabase from '../services/supabaseClient'
 
 interface PromocionesCartState {
@@ -43,6 +43,8 @@ function calcularMensajePromo(items: CarritoPromocionItem[], campania: Campania 
     }))
     const result = validatePromotionRules(rules, validateItems)
     if (result.valid) return null
+    const tip = getCartColorTypesTip(validateItems, rules)
+    if (tip) return `💡 ${tip}`
     return result.message ? `⚠️ ${result.message}` : null
   }
 

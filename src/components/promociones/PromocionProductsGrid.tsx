@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Product, CarritoPromocionItem, StockByVariant } from '../../types'
+import { getCartColorTypesTip, ValidatePromotionItem } from '../../services/promotionValidator'
 
 interface Props {
   productos: Product[]
@@ -18,6 +19,12 @@ export default function PromocionProductsGrid({
 }: Props) {
   const selectedIds = new Set(selectedItems.map(i => i.producto.id))
   const [variantPicker, setVariantPicker] = useState<{ product: Product; variants: StockByVariant[] } | null>(null)
+
+  const tiposEnCarrito = useMemo(() => {
+    return [...new Set(selectedItems.map(i => i.colorTipo).filter(Boolean))]
+  }, [selectedItems])
+
+  const hasMixedTypes = tiposEnCarrito.length >= 2
 
   const handleAddClick = (producto: Product) => {
     const variants = (producto as any).stockByVariants as StockByVariant[] | undefined
@@ -135,7 +142,7 @@ export default function PromocionProductsGrid({
                     ×
                   </button>
                 </div>
-              ) : (
+               ) : (
                 <button
                   onClick={() => handleAddClick(producto)}
                   style={{
@@ -146,6 +153,11 @@ export default function PromocionProductsGrid({
                 >
                   Agregar
                 </button>
+              )}
+              {tiposEnCarrito.length === 1 && !hasMixedTypes && selectedItems.length > 0 && (
+                <div style={{ fontSize: 10, color: '#f59e0b', textAlign: 'center', marginTop: 2 }}>
+                  💡 Elige tipo diferente
+                </div>
               )}
             </div>
           )
@@ -189,34 +201,40 @@ export default function PromocionProductsGrid({
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {group.sizes.map(variant => (
-                    <button
-                      key={`${variant.id || `${variant.colorId}-${variant.sizeId}`}`}
-                      onClick={() => {
-                        onAdd(variantPicker.product, variant.color_tipo)
-                        setVariantPicker(null)
-                      }}
-                      disabled={variant.stock <= 0}
-                      style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        padding: '8px 14px', borderRadius: 10,
-                        border: variant.stock > 0 ? '1px solid #22c55e' : '1px solid #e5e7eb',
-                        background: variant.stock > 0 ? '#f0fdf4' : '#f9fafb',
-                        cursor: variant.stock > 0 ? 'pointer' : 'not-allowed',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.borderColor = '#16a34a' } }}
-                      onMouseLeave={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#22c55e' } }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 600, color: variant.stock > 0 ? '#059669' : '#9ca3af' }}>
-                        {variant.sizeName || 'Único'}
-                      </span>
-                      <span style={{ fontSize: 11, color: variant.stock > 0 ? '#6b7280' : '#d1d5db' }}>
-                        Stock: {variant.stock}
-                      </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>
-                        ${(variant.precio || variantPicker.product.price).toFixed(2)}
-                      </span>
-                    </button>
+                    <div key={`${variant.id || `${variant.colorId}-${variant.sizeId}`}`}>
+                      <button
+                        onClick={() => {
+                          onAdd(variantPicker.product, variant.color_tipo)
+                          setVariantPicker(null)
+                        }}
+                        disabled={variant.stock <= 0}
+                        style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          padding: '8px 14px', borderRadius: 10,
+                          border: variant.stock > 0 ? '1px solid #22c55e' : '1px solid #e5e7eb',
+                          background: variant.stock > 0 ? '#f0fdf4' : '#f9fafb',
+                          cursor: variant.stock > 0 ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.borderColor = '#16a34a' } }}
+                        onMouseLeave={e => { if (variant.stock > 0) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#22c55e' } }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 600, color: variant.stock > 0 ? '#059669' : '#9ca3af' }}>
+                          {variant.sizeName || 'Único'}
+                        </span>
+                        <span style={{ fontSize: 11, color: variant.stock > 0 ? '#6b7280' : '#d1d5db' }}>
+                          Stock: {variant.stock}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>
+                          ${(variant.precio || variantPicker.product.price).toFixed(2)}
+                        </span>
+                      </button>
+                      {tiposEnCarrito.length === 1 && !hasMixedTypes && selectedItems.length > 0 && variant.color_tipo === tiposEnCarrito[0] && (
+                        <div style={{ fontSize: 9, color: '#f59e0b', textAlign: 'center', marginTop: 2, maxWidth: 100 }}>
+                          💡 mismo tipo
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
